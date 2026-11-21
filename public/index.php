@@ -37,7 +37,7 @@ function db(): PDO {
     if (!(int)$pdo->query('SELECT COUNT(*) FROM menus')->fetchColumn()) {
         $pdo->prepare('INSERT INTO menus(name,description,duration,price) VALUES(?,?,?,?)')->execute(['起業・経営相談','50分の個別相談',50,5500]);
     }
-    foreach (['site_name'=>'はなキャリ','open_time'=>'07:00','close_time'=>'22:00','slot_minutes'=>'30','closed_weekdays'=>''] as $k=>$v) {
+    foreach (['site_name'=>'はなキャリ','open_time'=>'07:00','close_time'=>'22:00','slot_minutes'=>'30','closed_weekdays'=>'','closed_dates'=>'','lead_minutes'=>'60','max_advance_days'=>'90'] as $k=>$v) {
         $pdo->prepare('INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)')->execute([$k,$v]);
     }
     return $pdo;
@@ -58,10 +58,15 @@ function availability(int $menuId,string $date): array {
     if(!$m) fail('メニューがありません',404);
     $s=prefs();$tz=new DateTimeZone(date_default_timezone_get());
     $day=new DateTimeImmutable($date.' 00:00:00',$tz);
-    $closed=array_filter(explode(',',$s['closed_weekdays']??''));
+    $closed=array_filter(explode(',',$s['closed_weekdays']??''),static fn($v)=>$v!=='');
+    if(in_array($date,array_filter(array_map('trim',explode(',', $s['closed_dates']??''))),true)) return [];
+    $today=new DateTimeImmutable('today',$tz);
+    $leadMinutes=(int)($s['lead_minutes']??60);
+    $maxDays=(int)($s['max_advance_days']??90);
+    if($day<$today || $day>$today->modify('+'.$maxDays.' days')) return [];
     if(in_array($day->format('w'),$closed,true)) return [];
     $opening=$s['open_time']??'07:00';$closing=$s['close_time']??'22:00';
-    if(!preg_match('/^\d\d:\d\d$/',$opening.$closing) && (!preg_match('/^\d\d:\d\d$/',$opening) || !preg_match('/^\d\d:\d\d$/',$closing))) fail('営業時間設定が不正です',500);
+    if(!preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/',$opening) || !preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/',$closing)) fail('営業時間設定が不正です',500);
     $start=new DateTimeImmutable($date.' '.$opening,$tz);$end=new DateTimeImmutable($date.' '.$closing,$tz);
     if($end<=$start) return [];
     $step=max(5,min(120,(int)($s['slot_minutes']??30)));
@@ -70,7 +75,7 @@ function availability(int $menuId,string $date): array {
     $rows->execute([$end->format('Y-m-d H:i:s'),$start->format('Y-m-d H:i:s')]);
     $busy=$rows->fetchAll();$out=[];
     for($t=$start;$t->modify('+'.$duration.' minutes')<=$end;$t=$t->modify('+'.$step.' minutes')){
-        if($t<=$now) continue;
+        if($t<$now->modify('+'.$leadMinutes.' minutes')) continue;
         $tEnd=$t->modify('+'.$duration.' minutes');
         $free=true;
         foreach($busy as $b){if($t->format('Y-m-d H:i:s')<$b['ends_at'] && $tEnd->format('Y-m-d H:i:s')>$b['starts_at']){$free=false;break;}}
@@ -85,8 +90,17 @@ try {
     if($action==='availability' && $method==='GET') jsonOut(['times'=>availability((int)($_GET['menu_id']??0),(string)($_GET['date']??''))]);
     if($action==='login' && $method==='POST'){
         checkCsrf();$data=body();$hash=setting('ADMIN_PASSWORD_HASH');
-        if(!$hash || !password_verify((string)($data['password']??''),$hash)) fail('認証に失敗しました',401);
-        session_regenerate_id(true);$_SESSION['admin']=true;jsonOut(['ok'=>true,'csrf'=>csrf()]);
+        $attempts=(int)($_SESSION['login_attempts']??0);
+        $last=(int)($_SESSION['last_login_failure']??0);
+        if($attempts>=5 && time()-$last<900) fail('ログイン試行回数が上限です。15分後に再試行してください',429);
+        if(!$hash || !password_verify((string)($data['password']??''),$hash)){
+            $_SESSION['login_attempts']=($last && time()-$last>=900)?1:$attempts+1;
+            $_SESSION['last_login_failure']=time();
+            fail('認証に失敗しました',401);
+        }
+        session_regenerate_id(true);
+        unset($_SESSION['login_attempts'],$_SESSION['last_login_failure']);
+        $_SESSION['admin']=true;jsonOut(['ok'=>true,'csrf'=>csrf()]);
     }
     if($action==='logout' && $method==='POST'){checkCsrf();$_SESSION=[];session_destroy();jsonOut(['ok'=>true]);}
     if($action==='book' && $method==='POST'){
@@ -109,6 +123,7 @@ try {
         requireAdmin();$q=db()->query('SELECT b.*,m.name AS menu_name FROM bookings b JOIN menus m ON m.id=b.menu_id ORDER BY b.starts_at DESC LIMIT 500');
         jsonOut(['menus'=>menus(false),'settings'=>prefs(),'bookings'=>$q->fetchAll()]);
     }
+    require_once $root.'/app/operations.php';
     if($action==='saveMenu' && $method==='POST'){
         requireAdmin();checkCsrf();$v=body();
         $id=(int)($v['id']??0);$name=trim((string)($v['name']??''));$desc=trim((string)($v['description']??''));
@@ -120,12 +135,15 @@ try {
     }
     if($action==='saveSettings' && $method==='POST'){
         requireAdmin();checkCsrf();$v=body();
-        foreach(['site_name','open_time','close_time','slot_minutes','closed_weekdays'] as $key){
+        foreach(['site_name','open_time','close_time','slot_minutes','closed_weekdays','closed_dates','lead_minutes','max_advance_days'] as $key){
             if(!array_key_exists($key,$v))continue;
             $val=trim((string)$v[$key]);if(strlen($val)>120)fail('設定値が長すぎます');
             if(in_array($key,['open_time','close_time'],true) && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/',$val))fail('営業時間の形式が不正です');
             if($key==='slot_minutes' && (!ctype_digit($val)||(int)$val<5||(int)$val>120))fail('時間間隔が不正です');
             if($key==='closed_weekdays' && !preg_match('/^[0-6](,[0-6])*$/',$val) && $val!=='')fail('休業日が不正です');
+            if($key==='closed_dates' && $val!=='' && (strlen($val)>3000 || !preg_match('/^\\d{4}-\\d{2}-\\d{2}(,\\d{4}-\\d{2}-\\d{2})*$/',$val))) fail('休業日の形式が不正です');
+            if($key==='lead_minutes' && (!ctype_digit($val)|| (int)$val>10080)) fail('受付締切時間が不正です');
+            if($key==='max_advance_days' && (!ctype_digit($val) || (int)$val<1 || (int)$val>365)) fail('予約受付期間が不正です');
             $stmt=db()->prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');$stmt->execute([$key,$val]);
         }
         jsonOut(['ok'=>true]);
@@ -161,9 +179,14 @@ try {
 <main id="adminView" class="hidden"><div class="hero"><h1>予約管理</h1><p>予約・メニュー・営業時間を管理します。</p></div>
 <section id="loginPanel" class="panel"><h2>管理者ログイン</h2><form id="loginForm"><label>管理者パスワード</label><input type="password" id="password" required><p id="loginError"></p><button>ログイン</button></form></section>
 <div id="dashboard" class="hidden"><section class="panel"><div class="actions"><h2 style="margin-right:auto">予約一覧（最新500件）</h2><button class="secondary" id="refresh">更新</button><button class="secondary" id="logout">ログアウト</button></div><div class="scroll"><table><thead><tr><th>ID</th><th>日時</th><th>メニュー</th><th>お名前</th><th>連絡先</th><th>状態</th><th>操作</th></tr></thead><tbody id="bookings"></tbody></table></div></section>
-<section class="panel"><h2>予約メニュー設定</h2><div id="menuEditor"></div><h3>メニュー追加・編集</h3><form id="menuForm"><input type="hidden" name="id"><label>メニュー名</label><input name="name" required maxlength="100"><label>説明</label><textarea name="description" maxlength="2000"></textarea><div class="row"><div><label>所要時間（分）</label><input name="duration" type="number" min="5" max="600" value="50" required></div><div><label>価格（円）</label><input name="price" type="number" min="0" value="5500" required></div></div><label><input style="width:auto" type="checkbox" name="active" checked> 公開する</label><button>保存</button> <button type="button" class="secondary" id="resetMenu">新規入力</button></form></section>
-<section class="panel"><h2>サイト・営業時間設定</h2><form id="settingsForm"><label>サイト名</label><input name="site_name" required><div class="row"><div><label>開始時間</label><input type="time" name="open_time" required></div><div><label>終了時間</label><input type="time" name="close_time" required></div></div><label>予約枠間隔（分）</label><input type="number" min="5" max="120" name="slot_minutes" required><label>休業曜日（0=日曜〜6=土曜。例: 0,6）</label><input name="closed_weekdays" placeholder="例: 0,6"><p id="settingsError"></p><button>営業時間を保存</button></form></section></div></main>
+<section class="panel"><h2>予約カレンダー・顧客検索</h2><div id="operations"></div></section><section class="panel"><h2>予約メニュー設定</h2><div id="menuEditor"></div><h3>メニュー追加・編集</h3><form id="menuForm"><input type="hidden" name="id"><label>メニュー名</label><input name="name" required maxlength="100"><label>説明</label><textarea name="description" maxlength="2000"></textarea><div class="row"><div><label>所要時間（分）</label><input name="duration" type="number" min="5" max="600" value="50" required></div><div><label>価格（円）</label><input name="price" type="number" min="0" value="5500" required></div></div><label><input style="width:auto" type="checkbox" name="active" checked> 公開する</label><button>保存</button> <button type="button" class="secondary" id="resetMenu">新規入力</button></form></section>
+<section class="panel"><h2>サイト・営業時間設定</h2><form id="settingsForm"><label>サイト名</label><input name="site_name" required><div class="row"><div><label>開始時間</label><input type="time" name="open_time" required></div><div><label>終了時間</label><input type="time" name="close_time" required></div></div><label>予約枠間隔（分）</label><input type="number" min="5" max="120" name="slot_minutes" required><label>休業曜日（0=日曜〜6=土曜。例: 0,6）</label><input name="closed_weekdays" placeholder="例: 0,6">
+<label>臨時休業日（YYYY-MM-DD、カンマ区切り）</label><input name="closed_dates" placeholder="2026-12-31,2027-01-01">
+<div class="row"><div><label>予約締切（何分前）</label><input type="number" name="lead_minutes" min="0" max="10080" value="60"></div>
+<div><label>何日先まで予約を受け付けるか</label><input type="number" name="max_advance_days" min="1" max="365" value="90"></div></div>
+<p id="settingsError"></p><button>営業時間を保存</button></form></section></div></main>
 <footer>Hanamaru Reservation Platform</footer>
+<script src="/assets/operations.js" defer></script>
 <script>
 'use strict';
 let cfg={},pickedMenu=null,pickedTime='',csrfToken='';
@@ -183,7 +206,7 @@ $('bookings').innerHTML=d.bookings.map(b=>'<tr><td>'+b.id+'</td><td>'+esc(b.star
 document.querySelectorAll('[data-book]').forEach(b=>b.onclick=async()=>{if(!confirm('予約状態を変更しますか？'))return;try{await api('setStatus',{}, {id:Number(b.dataset.book),status:b.dataset.status});await dashboard();}catch(e){alert(e.message);}});
 $('menuEditor').innerHTML=d.menus.map(m=>'<div class="actions" style="padding:9px;border-bottom:1px solid #eee"><b>'+esc(m.name)+'</b><span>'+m.duration+'分 / '+Number(m.price).toLocaleString()+'円 / '+(m.active?'公開':'非公開')+'</span><button class="secondary" data-edit="'+m.id+'">編集</button></div>').join('');
 document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{let m=d.menus.find(x=>Number(x.id)===Number(b.dataset.edit));for(let key of ['id','name','description','duration','price'])$('menuForm').elements[key].value=m[key];$('menuForm').elements.active.checked=!!Number(m.active);$('menuForm').scrollIntoView({behavior:'smooth'});});
-for(let key of ['site_name','open_time','close_time','slot_minutes','closed_weekdays'])$('settingsForm').elements[key].value=d.settings[key]??'';
+for(let key of ['site_name','open_time','close_time','slot_minutes','closed_weekdays','closed_dates','lead_minutes','max_advance_days'])$('settingsForm').elements[key].value=d.settings[key]??'';
 }
 $('refresh').onclick=()=>dashboard().catch(e=>alert(e.message));
 $('logout').onclick=async()=>{await api('logout',{},{});location.reload();};

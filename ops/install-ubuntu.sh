@@ -49,8 +49,8 @@ cat > "$APACHE_CONF" <<EOF
     DocumentRoot $REPO_DIR/public
     <Directory $REPO_DIR/public>
         Options -Indexes +FollowSymLinks
-        AllowOverride FileInfo
-        Require all granted
+        AllowOverride All
+        # Initial setup is private. After TLS, password, rate limits and backups are\n        # verified, change to 'Require all granted' deliberately.\n        Require local
     </Directory>
     ErrorLog /var/log/apache2/reserva-error.log
     CustomLog /var/log/apache2/reserva-access.log combined
@@ -79,7 +79,7 @@ IMPORTANT: Live access must stay disabled until ALL steps are complete:
 2. Ensure DNS points to this VPS and issue an HTTPS certificate:
    sudo apt-get install certbot python3-certbot-apache
    sudo certbot --apache -d $DOMAIN --redirect
-3. Configure web application firewall/rate limits, backups and email delivery.
-4. Verify /admin, DB permissions and two simultaneous same-slot reservations.
+3. Configure web application firewall/rate limits, backups and email delivery.\n4. Once secure, edit $APACHE_CONF and change 'Require local' to 'Require all granted'; then reload Apache.
+5. Verify /admin, DB permissions and two simultaneous same-slot reservations.
 This bootstrap does NOT activate real reservations and should not be exposed to the public before steps 1-4.
 EOF

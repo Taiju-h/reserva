@@ -1,0 +1,194 @@
+<?php
+declare(strict_types=1);
+ini_set('display_errors', '0');
+session_set_cookie_params(['httponly'=>true, 'secure'=>!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off', 'samesite'=>'Lax']);
+session_start();
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('X-Frame-Options: DENY');
+$root = dirname(__DIR__);
+$env = [];
+if (is_file($root.'/.env')) {
+    foreach (file($root.'/.env', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line=trim($line);
+        if ($line==='' || str_starts_with($line,'#') || !str_contains($line,'=')) continue;
+        [$k,$v]=explode('=',$line,2);
+        $env[trim($k)]=trim($v," \t\n\r\0\x0B\"'");
+    }
+}
+date_default_timezone_set($env['APP_TIMEZONE'] ?? 'Asia/Tokyo');
+function setting(string $key, string $fallback=''): string { global $env; return $env[$key] ?? $fallback; }
+function jsonOut(array $data, int $status=200): never { http_response_code($status); header('Content-Type: application/json; charset=utf-8'); echo json_encode($data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES); exit; }
+function fail(string $message,int $status=400): never { jsonOut(['error'=>$message],$status); }
+function db(): PDO {
+    static $pdo=null;
+    if ($pdo) return $pdo;
+    global $root;
+    if (!extension_loaded('pdo_sqlite')) fail('サーバーのSQLite拡張が必要です',503);
+    $path=setting('DB_PATH','storage/reservations.sqlite');
+    if (!str_starts_with($path,'/')) $path=$root.'/'.$path;
+    if (str_contains(realpath(dirname($path)) ?: '',realpath($root.'/public') ?: '/nonexistent/public')) fail('DB保存先の設定が不正です',500);
+    $pdo=new PDO('sqlite:'.$path,null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_TIMEOUT=>5]);
+    $pdo->exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON');
+    $pdo->exec('CREATE TABLE IF NOT EXISTS menus (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT "", duration INTEGER NOT NULL, price INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1)');
+    $pdo->exec('CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, menu_id INTEGER NOT NULL REFERENCES menus(id), starts_at TEXT NOT NULL, ends_at TEXT NOT NULL, customer_name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT NOT NULL DEFAULT "", note TEXT NOT NULL DEFAULT "", status TEXT NOT NULL DEFAULT "confirmed", created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_bookings_times ON bookings(starts_at,ends_at,status)');
+    $pdo->exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY,value TEXT NOT NULL)');
+    if (!(int)$pdo->query('SELECT COUNT(*) FROM menus')->fetchColumn()) {
+        $pdo->prepare('INSERT INTO menus(name,description,duration,price) VALUES(?,?,?,?)')->execute(['起業・経営相談','50分の個別相談',50,5500]);
+    }
+    foreach (['site_name'=>'はなキャリ','open_time'=>'07:00','close_time'=>'22:00','slot_minutes'=>'30','closed_weekdays'=>''] as $k=>$v) {
+        $pdo->prepare('INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)')->execute([$k,$v]);
+    }
+    return $pdo;
+}
+function prefs(): array { return db()->query('SELECT key,value FROM settings')->fetchAll(PDO::FETCH_KEY_PAIR); }
+function menus(bool $onlyActive=true): array {
+    return db()->query('SELECT * FROM menus'.($onlyActive?' WHERE active=1':'').' ORDER BY id DESC')->fetchAll();
+}
+function admin(): bool { return !empty($_SESSION['admin']); }
+function requireAdmin(): void { if (!admin()) fail('管理者ログインが必要です',401); }
+function csrf(): string { if(empty($_SESSION['csrf'])) $_SESSION['csrf']=bin2hex(random_bytes(24)); return $_SESSION['csrf']; }
+function checkCsrf(): void { if (!hash_equals(csrf(),(string)($_SERVER['HTTP_X_CSRF_TOKEN']??''))) fail('CSRFトークンが不正です',403); }
+function body(): array { $v=json_decode(file_get_contents('php://input'),true); return is_array($v)?$v:[]; }
+function dateValid(string $d): bool { $t=DateTimeImmutable::createFromFormat('!Y-m-d',$d); return $t!==false && $t->format('Y-m-d')===$d; }
+function availability(int $menuId,string $date): array {
+    if(!dateValid($date)) fail('日付が不正です');
+    $menu=db()->prepare('SELECT * FROM menus WHERE id=? AND active=1');$menu->execute([$menuId]);$m=$menu->fetch();
+    if(!$m) fail('メニューがありません',404);
+    $s=prefs();$tz=new DateTimeZone(date_default_timezone_get());
+    $day=new DateTimeImmutable($date.' 00:00:00',$tz);
+    $closed=array_filter(explode(',',$s['closed_weekdays']??''));
+    if(in_array($day->format('w'),$closed,true)) return [];
+    $opening=$s['open_time']??'07:00';$closing=$s['close_time']??'22:00';
+    if(!preg_match('/^\d\d:\d\d$/',$opening.$closing) && (!preg_match('/^\d\d:\d\d$/',$opening) || !preg_match('/^\d\d:\d\d$/',$closing))) fail('営業時間設定が不正です',500);
+    $start=new DateTimeImmutable($date.' '.$opening,$tz);$end=new DateTimeImmutable($date.' '.$closing,$tz);
+    if($end<=$start) return [];
+    $step=max(5,min(120,(int)($s['slot_minutes']??30)));
+    $duration=(int)$m['duration'];$now=new DateTimeImmutable('now',$tz);
+    $rows=db()->prepare('SELECT starts_at, ends_at FROM bookings WHERE status="confirmed" AND starts_at < ? AND ends_at > ?');
+    $rows->execute([$end->format('Y-m-d H:i:s'),$start->format('Y-m-d H:i:s')]);
+    $busy=$rows->fetchAll();$out=[];
+    for($t=$start;$t->modify('+'.$duration.' minutes')<=$end;$t=$t->modify('+'.$step.' minutes')){
+        if($t<=$now) continue;
+        $tEnd=$t->modify('+'.$duration.' minutes');
+        $free=true;
+        foreach($busy as $b){if($t->format('Y-m-d H:i:s')<$b['ends_at'] && $tEnd->format('Y-m-d H:i:s')>$b['starts_at']){$free=false;break;}}
+        if($free) $out[]=$t->format('H:i');
+    }
+    return $out;
+}
+$action=(string)($_GET['action']??'');
+$method=$_SERVER['REQUEST_METHOD']??'GET';
+try {
+    if($action==='config' && $method==='GET') jsonOut(['settings'=>prefs(),'menus'=>menus(),'admin'=>admin(),'csrf'=>csrf()]);
+    if($action==='availability' && $method==='GET') jsonOut(['times'=>availability((int)($_GET['menu_id']??0),(string)($_GET['date']??''))]);
+    if($action==='login' && $method==='POST'){
+        checkCsrf();$data=body();$hash=setting('ADMIN_PASSWORD_HASH');
+        if(!$hash || !password_verify((string)($data['password']??''),$hash)) fail('認証に失敗しました',401);
+        session_regenerate_id(true);$_SESSION['admin']=true;jsonOut(['ok'=>true,'csrf'=>csrf()]);
+    }
+    if($action==='logout' && $method==='POST'){checkCsrf();$_SESSION=[];session_destroy();jsonOut(['ok'=>true]);}
+    if($action==='book' && $method==='POST'){
+        checkCsrf();$v=body();
+        $id=(int)($v['menu_id']??0);$date=(string)($v['date']??'');$time=(string)($v['time']??'');
+        $name=trim((string)($v['name']??''));$email=trim((string)($v['email']??''));$phone=trim((string)($v['phone']??''));$note=trim((string)($v['note']??''));
+        if(mb_strlen($name)<1 || mb_strlen($name)>100 || !filter_var($email,FILTER_VALIDATE_EMAIL) || strlen($email)>254 || strlen($phone)>40 || mb_strlen($note)>1000) fail('入力内容をご確認ください');
+        if(!preg_match('/^\d\d:\d\d$/',$time)) fail('時間が不正です');
+        $pdo=db();$pdo->exec('BEGIN IMMEDIATE');
+        try {
+            if(!in_array($time,availability($id,$date),true)) { $pdo->rollBack();fail('この時間は満席です。別の時間を選択してください',409); }
+            $stmt=$pdo->prepare('SELECT duration FROM menus WHERE id=? AND active=1');$stmt->execute([$id]);$duration=(int)$stmt->fetchColumn();
+            $begin=new DateTimeImmutable($date.' '.$time);
+            $insert=$pdo->prepare('INSERT INTO bookings(menu_id,starts_at,ends_at,customer_name,email,phone,note) VALUES(?,?,?,?,?,?,?)');
+            $insert->execute([$id,$begin->format('Y-m-d H:i:s'),$begin->modify('+'.$duration.' minutes')->format('Y-m-d H:i:s'),$name,$email,$phone,$note]);
+            $bookingId=(int)$pdo->lastInsertId();$pdo->commit();jsonOut(['ok'=>true,'booking_id'=>$bookingId]);
+        }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+    }
+    if($action==='adminData' && $method==='GET'){
+        requireAdmin();$q=db()->query('SELECT b.*,m.name AS menu_name FROM bookings b JOIN menus m ON m.id=b.menu_id ORDER BY b.starts_at DESC LIMIT 500');
+        jsonOut(['menus'=>menus(false),'settings'=>prefs(),'bookings'=>$q->fetchAll()]);
+    }
+    if($action==='saveMenu' && $method==='POST'){
+        requireAdmin();checkCsrf();$v=body();
+        $id=(int)($v['id']??0);$name=trim((string)($v['name']??''));$desc=trim((string)($v['description']??''));
+        $duration=(int)($v['duration']??0);$price=(int)($v['price']??-1);$active=!empty($v['active'])?1:0;
+        if(!$name || mb_strlen($name)>100 || mb_strlen($desc)>2000 || $duration<5 || $duration>600 || $price<0 || $price>10000000)fail('メニュー設定が不正です');
+        if($id){$stmt=db()->prepare('UPDATE menus SET name=?,description=?,duration=?,price=?,active=? WHERE id=?');$stmt->execute([$name,$desc,$duration,$price,$active,$id]);}
+        else {$stmt=db()->prepare('INSERT INTO menus(name,description,duration,price,active) VALUES(?,?,?,?,?)');$stmt->execute([$name,$desc,$duration,$price,$active]);}
+        jsonOut(['ok'=>true]);
+    }
+    if($action==='saveSettings' && $method==='POST'){
+        requireAdmin();checkCsrf();$v=body();
+        foreach(['site_name','open_time','close_time','slot_minutes','closed_weekdays'] as $key){
+            if(!array_key_exists($key,$v))continue;
+            $val=trim((string)$v[$key]);if(strlen($val)>120)fail('設定値が長すぎます');
+            if(in_array($key,['open_time','close_time'],true) && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/',$val))fail('営業時間の形式が不正です');
+            if($key==='slot_minutes' && (!ctype_digit($val)||(int)$val<5||(int)$val>120))fail('時間間隔が不正です');
+            if($key==='closed_weekdays' && !preg_match('/^[0-6](,[0-6])*$/',$val) && $val!=='')fail('休業日が不正です');
+            $stmt=db()->prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');$stmt->execute([$key,$val]);
+        }
+        jsonOut(['ok'=>true]);
+    }
+    if($action==='setStatus' && $method==='POST'){
+        requireAdmin();checkCsrf();$v=body();$status=(string)($v['status']??'');$id=(int)($v['id']??0);
+        if(!in_array($status,['confirmed','cancelled'],true)||$id<1)fail('不正な更新です');
+        $pdo=db();$pdo->exec('BEGIN IMMEDIATE');
+        try{
+            $stmt=$pdo->prepare('SELECT * FROM bookings WHERE id=?');$stmt->execute([$id]);$b=$stmt->fetch();
+            if(!$b){$pdo->rollBack();fail('予約がありません',404);}
+            if($status==='confirmed'){
+                $stmt=$pdo->prepare('SELECT count(*) FROM bookings WHERE id<>? AND status="confirmed" AND starts_at<? AND ends_at>?');
+                $stmt->execute([$id,$b['ends_at'],$b['starts_at']]);
+                if((int)$stmt->fetchColumn()>0){$pdo->rollBack();fail('別の予約と重複します',409);}
+            }
+            $stmt=$pdo->prepare('UPDATE bookings SET status=? WHERE id=?');$stmt->execute([$status,$id]);
+            $pdo->commit();jsonOut(['ok'=>true]);
+        }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+    }
+    if($action!=='') fail('APIが見つかりません',404);
+}catch(Throwable $e){error_log('[reserva] '.$e->getMessage());fail('処理に失敗しました。管理者にお問い合わせください',500);}
+?><!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>はなキャリ | 相談予約</title><style>
+:root{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#26323e;background:#f6f7f9}*{box-sizing:border-box}body{margin:0}header{background:#fff;border-bottom:1px solid #e5e9ef;padding:19px max(20px,calc((100vw - 1040px)/2));display:flex;align-items:center;justify-content:space-between}header strong{font-size:22px;color:#1e6663}a{color:#1f7771;text-decoration:none}main{max-width:1040px;margin:32px auto;padding:0 16px}.hero{background:linear-gradient(120deg,#f3faf7,#e9f2f8);padding:34px;border-radius:14px;margin-bottom:25px}.hero h1{margin:0 0 8px;font-size:26px}section.panel{background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:24px;margin-bottom:18px;box-shadow:0 2px 12px #22334408}h2{font-size:19px;margin:0 0 18px}label{display:block;font-size:14px;font-weight:600;margin:13px 0 6px}input,select,textarea,button{font:inherit}input,select,textarea{width:100%;border:1px solid #ced6de;border-radius:8px;padding:11px;background:#fff}textarea{min-height:88px}button{border:0;border-radius:8px;padding:12px 18px;background:#257b76;color:white;font-weight:700;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}button.secondary{color:#335;background:#ecf0f2}button.danger{background:#ae5050}.menus{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.menu{border:1px solid #d7e0e3;background:#fff;padding:18px;text-align:left;border-radius:10px;cursor:pointer}.menu.selected{border:2px solid #257b76;background:#f0f9f7}.menu b{display:block;margin-bottom:6px}.menu small{display:block;margin-top:8px;color:#64717d}.times{display:grid;grid-template-columns:repeat(auto-fill,minmax(83px,1fr));gap:8px}.times button{background:#fff;color:#257b76;border:1px solid #91b9b6;padding:10px}.times button.chosen{background:#257b76;color:white}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.muted{color:#687686}.hidden{display:none!important}.notice{background:#eff8f3;padding:16px;border-radius:8px;margin:16px 0}.error{background:#fff0ee;color:#a43626;padding:12px;border-radius:8px;margin:12px 0}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:10px 7px;text-align:left;border-bottom:1px solid #e8edf1}th{background:#f7f9fa}.scroll{overflow:auto}.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}nav{display:flex;gap:15px}footer{text-align:center;color:#71808b;padding:35px}@media(max-width:620px){.row{grid-template-columns:1fr}.hero{padding:22px}section.panel{padding:17px}header{padding:16px}.hero h1{font-size:22px}}
+</style></head><body>
+<header><strong id="brand">はなキャリ</strong><nav><a href="/">予約する</a><a href="/admin">管理画面</a></nav></header>
+<main id="publicView"><div class="hero"><h1 id="siteTitle">相談予約</h1><p>ご希望のメニューと日時を選んで予約してください。</p></div>
+<section class="panel"><h2>1. メニューを選択</h2><div class="menus" id="menus"></div></section>
+<section class="panel"><h2>2. 日時を選択</h2><label for="date">希望日</label><input id="date" type="date"><p class="muted">ご予約可能な時間</p><div class="times" id="times">先にメニューと日付を選択してください。</div></section>
+<section class="panel"><h2>3. お客様情報</h2><form id="bookingForm"><div class="row"><div><label>お名前 *</label><input name="name" maxlength="100" required autocomplete="name"></div><div><label>メールアドレス *</label><input name="email" type="email" maxlength="254" required autocomplete="email"></div></div><label>電話番号</label><input name="phone" maxlength="40" autocomplete="tel"><label>備考</label><textarea name="note" maxlength="1000"></textarea><p id="selection" class="muted"></p><div id="bookingError"></div><button id="bookBtn" disabled>予約を確定する</button></form></section></main>
+<main id="adminView" class="hidden"><div class="hero"><h1>予約管理</h1><p>予約・メニュー・営業時間を管理します。</p></div>
+<section id="loginPanel" class="panel"><h2>管理者ログイン</h2><form id="loginForm"><label>管理者パスワード</label><input type="password" id="password" required><p id="loginError"></p><button>ログイン</button></form></section>
+<div id="dashboard" class="hidden"><section class="panel"><div class="actions"><h2 style="margin-right:auto">予約一覧（最新500件）</h2><button class="secondary" id="refresh">更新</button><button class="secondary" id="logout">ログアウト</button></div><div class="scroll"><table><thead><tr><th>ID</th><th>日時</th><th>メニュー</th><th>お名前</th><th>連絡先</th><th>状態</th><th>操作</th></tr></thead><tbody id="bookings"></tbody></table></div></section>
+<section class="panel"><h2>予約メニュー設定</h2><div id="menuEditor"></div><h3>メニュー追加・編集</h3><form id="menuForm"><input type="hidden" name="id"><label>メニュー名</label><input name="name" required maxlength="100"><label>説明</label><textarea name="description" maxlength="2000"></textarea><div class="row"><div><label>所要時間（分）</label><input name="duration" type="number" min="5" max="600" value="50" required></div><div><label>価格（円）</label><input name="price" type="number" min="0" value="5500" required></div></div><label><input style="width:auto" type="checkbox" name="active" checked> 公開する</label><button>保存</button> <button type="button" class="secondary" id="resetMenu">新規入力</button></form></section>
+<section class="panel"><h2>サイト・営業時間設定</h2><form id="settingsForm"><label>サイト名</label><input name="site_name" required><div class="row"><div><label>開始時間</label><input type="time" name="open_time" required></div><div><label>終了時間</label><input type="time" name="close_time" required></div></div><label>予約枠間隔（分）</label><input type="number" min="5" max="120" name="slot_minutes" required><label>休業曜日（0=日曜〜6=土曜。例: 0,6）</label><input name="closed_weekdays" placeholder="例: 0,6"><p id="settingsError"></p><button>営業時間を保存</button></form></section></div></main>
+<footer>Hanamaru Reservation Platform</footer>
+<script>
+'use strict';
+let cfg={},pickedMenu=null,pickedTime='',csrfToken='';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(action,params={},post){const q=new URLSearchParams({action,...params});const options={};if(post!==undefined){options.method='POST';options.headers={'Content-Type':'application/json','X-CSRF-Token':csrfToken};options.body=JSON.stringify(post);}const response=await fetch('/?'+q,{...options,credentials:'same-origin'});let data=await response.json();if(!response.ok)throw Error(data.error||'通信エラー');return data;}
+function error(id,e){$(id).innerHTML='<div class="error">'+esc(e.message||e)+'</div>';}
+function today(){let parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());return parts;}
+function showMenus(){ $('menus').innerHTML=cfg.menus.map(m=>'<button type="button" class="menu '+(pickedMenu===Number(m.id)?'selected':'')+'" data-id="'+m.id+'"><b>'+esc(m.name)+'</b>'+esc(m.description)+'<small>'+Number(m.duration)+'分 ・ '+Number(m.price).toLocaleString('ja-JP')+'円</small></button>').join('')||'予約メニューがありません';document.querySelectorAll('.menu').forEach(el=>el.onclick=()=>{pickedMenu=Number(el.dataset.id);pickedTime='';showMenus();loadTimes();});}
+async function loadTimes(){pickedTime='';$('bookBtn').disabled=true;selection();if(!pickedMenu || !$('date').value){$('times').textContent='メニューと日付を選んでください';return;} $('times').textContent='読み込み中…';try{const date=$('date').value;const d=await api('availability',{menu_id:pickedMenu,date});if(date!==$('date').value)return;$('times').innerHTML=d.times.map(t=>'<button type="button" data-time="'+t+'">'+t+'</button>').join('')||'<p class="muted">この日は空き枠がありません。</p>';document.querySelectorAll('[data-time]').forEach(btn=>btn.onclick=()=>{pickedTime=btn.dataset.time;document.querySelectorAll('[data-time]').forEach(x=>x.classList.toggle('chosen',x===btn));$('bookBtn').disabled=false;selection();});}catch(e){error('times',e);}}
+function selection(){let menu=cfg.menus?.find(m=>Number(m.id)===pickedMenu);$('selection').textContent=menu&&pickedTime?menu.name+' / '+$('date').value+' '+pickedTime+' / '+Number(menu.price).toLocaleString('ja-JP')+'円':'';}
+async function init(){try{cfg=await api('config');csrfToken=cfg.csrf;$('brand').textContent=cfg.settings.site_name;$('siteTitle').textContent=cfg.settings.site_name+' 予約受付';let adminRoute=location.pathname.replace(/\/$/,'')==='/admin';$('publicView').classList.toggle('hidden',adminRoute);$('adminView').classList.toggle('hidden',!adminRoute);if(adminRoute){if(cfg.admin)await dashboard();return;}$('date').min=today();$('date').value=today();showMenus();$('date').onchange=loadTimes;}catch(e){alert(e.message);}}
+$('bookingForm').onsubmit=async e=>{e.preventDefault();if(!pickedMenu||!pickedTime)return;let data=Object.fromEntries(new FormData(e.target));$('bookBtn').disabled=true;$('bookingError').innerHTML='';try{const result=await api('book',{}, {...data,menu_id:pickedMenu,date:$('date').value,time:pickedTime});$('bookingForm').innerHTML='<div class="notice"><h2>予約を受け付けました</h2><p>予約番号: '+result.booking_id+'</p><p>予約内容を控えてください。現在、自動メール送信は未設定です。</p></div>';loadTimes();}catch(err){error('bookingError',err);$('bookBtn').disabled=false;}};
+$('loginForm').onsubmit=async e=>{e.preventDefault();try{await api('login',{}, {password:$('password').value});$('password').value='';await dashboard();}catch(err){error('loginError',err);}};
+async function dashboard(){const d=await api('adminData');$('loginPanel').classList.add('hidden');$('dashboard').classList.remove('hidden');
+$('bookings').innerHTML=d.bookings.map(b=>'<tr><td>'+b.id+'</td><td>'+esc(b.starts_at)+'</td><td>'+esc(b.menu_name)+'</td><td>'+esc(b.customer_name)+'</td><td>'+esc(b.email)+'<br>'+esc(b.phone)+'</td><td>'+esc(b.status)+'</td><td><button class="secondary" data-book="'+b.id+'" data-status="'+(b.status==='confirmed'?'cancelled':'confirmed')+'">'+(b.status==='confirmed'?'取消':'復帰')+'</button></td></tr>').join('');
+document.querySelectorAll('[data-book]').forEach(b=>b.onclick=async()=>{if(!confirm('予約状態を変更しますか？'))return;try{await api('setStatus',{}, {id:Number(b.dataset.book),status:b.dataset.status});await dashboard();}catch(e){alert(e.message);}});
+$('menuEditor').innerHTML=d.menus.map(m=>'<div class="actions" style="padding:9px;border-bottom:1px solid #eee"><b>'+esc(m.name)+'</b><span>'+m.duration+'分 / '+Number(m.price).toLocaleString()+'円 / '+(m.active?'公開':'非公開')+'</span><button class="secondary" data-edit="'+m.id+'">編集</button></div>').join('');
+document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{let m=d.menus.find(x=>Number(x.id)===Number(b.dataset.edit));for(let key of ['id','name','description','duration','price'])$('menuForm').elements[key].value=m[key];$('menuForm').elements.active.checked=!!Number(m.active);$('menuForm').scrollIntoView({behavior:'smooth'});});
+for(let key of ['site_name','open_time','close_time','slot_minutes','closed_weekdays'])$('settingsForm').elements[key].value=d.settings[key]??'';
+}
+$('refresh').onclick=()=>dashboard().catch(e=>alert(e.message));
+$('logout').onclick=async()=>{await api('logout',{},{});location.reload();};
+$('resetMenu').onclick=()=>{$('menuForm').reset();$('menuForm').elements.id.value='';};
+$('menuForm').onsubmit=async e=>{e.preventDefault();let d=Object.fromEntries(new FormData(e.target));d.active=e.target.elements.active.checked;try{await api('saveMenu',{},d);$('resetMenu').click();await dashboard();}catch(err){alert(err.message);}};
+$('settingsForm').onsubmit=async e=>{e.preventDefault();try{await api('saveSettings',{},Object.fromEntries(new FormData(e.target)));await dashboard();alert('保存しました');}catch(err){error('settingsError',err);}};
+init();
+</script></body></html>

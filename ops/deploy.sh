@@ -48,15 +48,17 @@ PY
 fi
 rollback() {
   code="$?"
+  trap - EXIT
   if [[ "$code" -ne 0 && "${SWITCHED:-0}" == 1 ]]; then
     echo "Deployment failed, restoring previous code revision: $PREVIOUS" >&2
     git reset --hard "$PREVIOUS" || true
     echo "DB snapshot preserved at: $BACKUP" >&2
     echo "No automatic database restore: migrations require a coordinated procedure." >&2
   fi
+  cleanup
   exit "$code"
 }
-trap rollback ERR
+trap rollback EXIT
 git reset --hard "$TARGET"
 SWITCHED=1
 find public app -type f -name '*.php' -print0 | xargs -0 -r -n1 php -l >/dev/null

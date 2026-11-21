@@ -10,12 +10,12 @@ fi
 if [[ "${EUID}" -ne 0 ]]; then echo "Run with sudo" >&2; exit 1; fi
 if ! command -v apt-get >/dev/null; then echo "Ubuntu/Debian with apt required" >&2; exit 1; fi
 
-REPO_DIR="/var/www/reserva"
-APACHE_CONF="/etc/apache2/sites-available/reserva.conf"
+REPO_DIR="/var/www/hanamaru"
+APACHE_CONF="/etc/apache2/sites-available/hanamaru.conf"
 if [[ -e "$APACHE_CONF" ]]; then
-  echo "Existing reserva Apache config detected: $APACHE_CONF. Not overwriting." >&2; exit 1
+  echo "Existing hanamaru Apache config detected: $APACHE_CONF. Not overwriting." >&2; exit 1
 fi
-if [[ -e "$REPO_DIR" && ! -d "$REPO_DIR/.git" ]]; then
+if [[ -e "$REPO_DIR" && ! -d "$REPO_DIR/.git" && -n "$(ls -A "$REPO_DIR")" ]]; then
   echo "$REPO_DIR exists but is not a Git checkout. No changes made." >&2; exit 1
 fi
 
@@ -50,20 +50,21 @@ cat > "$APACHE_CONF" <<EOF
     <Directory $REPO_DIR/public>
         Options -Indexes +FollowSymLinks
         AllowOverride All
-        # Initial setup is private. After TLS, password, rate limits and backups are\n        # verified, change to 'Require all granted' deliberately.\n        Require local
+        # Initial setup is private. Open to public only after hardening.
+        Require local
     </Directory>
-    ErrorLog /var/log/apache2/reserva-error.log
-    CustomLog /var/log/apache2/reserva-access.log combined
+    ErrorLog /var/log/apache2/hanamaru-error.log
+    CustomLog /var/log/apache2/hanamaru-access.log combined
 </VirtualHost>
 EOF
 # Refuse to take over an existing virtualhost server name.
-if grep -Riq --exclude=reserva.conf "ServerName[[:space:]]\+$DOMAIN" /etc/apache2/sites-enabled/; then
+if grep -Riq --exclude=hanamaru.conf "ServerName[[:space:]]\+$DOMAIN" /etc/apache2/sites-enabled/; then
   echo "Domain already used by an Apache VirtualHost. Removing unenabled config." >&2
   rm -f "$APACHE_CONF"
   exit 1
 fi
 apache2ctl configtest
-a2ensite reserva.conf
+a2ensite hanamaru.conf
 apache2ctl configtest
 systemctl reload apache2
 
@@ -79,7 +80,8 @@ IMPORTANT: Live access must stay disabled until ALL steps are complete:
 2. Ensure DNS points to this VPS and issue an HTTPS certificate:
    sudo apt-get install certbot python3-certbot-apache
    sudo certbot --apache -d $DOMAIN --redirect
-3. Configure web application firewall/rate limits, backups and email delivery.\n4. Once secure, edit $APACHE_CONF and change 'Require local' to 'Require all granted'; then reload Apache.
+3. Configure web application firewall/rate limits, backups and email delivery.
+4. Once secure, edit $APACHE_CONF and change 'Require local' to 'Require all granted'; then reload Apache.
 5. Verify /admin, DB permissions and two simultaneous same-slot reservations.
 This bootstrap does NOT activate real reservations and should not be exposed to the public before steps 1-4.
 EOF

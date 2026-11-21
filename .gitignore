@@ -1,0 +1,7 @@
+.env
+/storage/*
+!/storage/.gitkeep
+/vendor/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

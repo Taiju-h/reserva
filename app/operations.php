@@ -26,9 +26,8 @@ if ($action==='customers' && $method==='GET') {
       FROM bookings';
     $args=[];
     if($search!=='') {
-        $sql.=' WHERE customer_name LIKE ? ESCAPE \'\\\' OR email LIKE ? ESCAPE \'\\\' OR phone LIKE ? ESCAPE \'\\\'';
-        $safe=str_replace(['\\','%','_'],['\\\\','\\%','\\_'],$search);
-        $args=array_fill(0,3,'%'.$safe.'%');
+        $sql.=' WHERE customer_name LIKE ? OR email LIKE ? OR phone LIKE ?';
+        $args=array_fill(0,3,'%'.$search.'%');
     }
     $sql.=' GROUP BY lower(trim(email)) ORDER BY last_booking DESC LIMIT 300';
     $stmt=db()->prepare($sql);$stmt->execute($args);

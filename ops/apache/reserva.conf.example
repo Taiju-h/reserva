@@ -1,0 +1,15 @@
+# Example only. Do not replace UZERO's existing VirtualHosts.
+# Change ServerName, certificate configuration and paths for the real domain.
+<VirtualHost *:80>
+    ServerName reserve.example.com
+    DocumentRoot /var/www/reserva/public
+    <Directory /var/www/reserva/public>
+        AllowOverride All
+        Require all granted
+        Options -Indexes
+    </Directory>
+    ErrorLog /var/log/apache2/reserva-error.log
+    CustomLog /var/log/apache2/reserva-access.log combined
+</VirtualHost>
+# Enable HTTPS and redirect HTTP -> HTTPS before production.
+# Keep /var/www/reserva/.env and /var/www/reserva/storage outside DocumentRoot.

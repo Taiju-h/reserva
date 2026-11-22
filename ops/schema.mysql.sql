@@ -1,3 +1,4 @@
+SET NAMES utf8mb4;
 -- Hanamaru / MySQL 8.0 schema. Initial creation only.
 -- The database is created by the MySQL image with DB_DATABASE from .env.
 CREATE TABLE IF NOT EXISTS menus (

@@ -1,0 +1,29 @@
+/* Hanacari public-facing layout: independent recreation from publicly visible service information. */
+:root{--hana-ink:#334155;--hana-accent:#328b83;--hana-line:#e5e9ed}
+body{background:#f8f9fb;color:var(--hana-ink)}
+header{position:sticky;top:0;z-index:10;box-shadow:0 1px 7px #1626320b}
+header strong{font-size:24px;letter-spacing:.025em;color:#398a81}
+header nav a{font-weight:600;color:#495b69;font-size:14px}
+header nav a:hover{color:#1c756d}
+#publicView{max-width:1030px}
+#publicView .hero{border-radius:0;background:linear-gradient(110deg,#e9f7f5,#f4f9f9 65%,#edf6fa);padding:55px 34px 45px;margin-bottom:0;border:1px solid #e3eeed}
+#publicView .hero h1{font-size:33px;font-weight:700;margin:0 0 10px;letter-spacing:.08em;color:#277c74}
+#publicView .hero p:last-child{margin:0;color:#54666d}
+.eyebrow{letter-spacing:.25em;font-size:11px;color:#68938f;margin:0 0 15px}
+.business-info{display:grid;grid-template-columns:1fr 1fr;background:#fff;border:1px solid var(--hana-line);border-top:0;margin-bottom:24px}
+.business-info>div{padding:19px 24px}
+.business-info>div+div{border-left:1px solid var(--hana-line)}
+.business-info strong{font-size:13px;color:#60747a}
+.business-info p{font-size:14px;margin:9px 0 0}
+#publicView .panel{box-shadow:none;border-radius:4px;border-color:var(--hana-line);padding:28px;margin:18px 0}
+#publicView .panel h2{font-size:20px;border-bottom:1px solid #e8eff0;padding-bottom:15px;color:#314d54}
+#publicView .menu{border-radius:4px;border-color:#d8e1e2;box-shadow:0 2px 9px #263d4b0b}
+#publicView .menu b{font-size:17px}
+#publicView .menu small{font-size:14px;font-weight:700;color:#337f78}
+#publicView .menu.selected{background:#f2fbf8}
+#publicView button:not(.menu){border-radius:4px}
+#publicView #bookBtn{background:#278b81;min-width:230px}
+#publicView .extras h2:not(:first-child){margin-top:25px}
+.legal-links{display:flex;justify-content:center;flex-wrap:wrap;gap:16px;padding:16px 10px 32px}
+.legal-links a{font-size:12px;color:#657a82;text-decoration:underline}
+@media(max-width:650px){header{position:relative}header nav{gap:9px}header nav a{font-size:12px}#publicView .hero{padding:33px 20px}#publicView .hero h1{font-size:28px}.business-info{grid-template-columns:1fr}.business-info>div+div{border-left:0;border-top:1px solid var(--hana-line)}#publicView .panel{padding:17px}}

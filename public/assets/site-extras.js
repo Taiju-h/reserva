@@ -5,7 +5,8 @@ const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 function setHero(){
   const hero=(cfg.media||[]).find(m=>m.kind==='hero');
   if(hero && el('siteHero')) {
-    el('siteHero').style.backgroundImage='linear-gradient(90deg,rgba(243,250,247,.94),rgba(233,242,248,.68)),url("/?action=media&id='+Number(hero.id)+'")';
+    el('siteHero').classList.add('has-hero-photo');
+    el('siteHero').style.setProperty('--hanacari-hero','url("/?action=media&id='+Number(hero.id)+'")');
     el('siteHero').style.backgroundSize='cover';
     el('siteHero').style.backgroundPosition='center';
   }

@@ -134,8 +134,8 @@ function stripeWebhook(): never {
                     && (int)($session['amount_total']??-1)===(int)$p['amount_jpy']
                     && (string)($session['client_reference_id']??'')===(string)$p['booking_id'];
                 if($paid){
-                    $q=$db->prepare('SELECT COUNT(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND b.starts_at<? AND b.ends_at>? AND (b.status="confirmed" OR (b.status="pending_payment" AND p.expires_at>datetime("now","localtime")) )');
-                    $q->execute([$p['booking_id'],$p['ends_at'],$p['starts_at']]);
+                    $q=$db->prepare('SELECT COUNT(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND b.starts_at<? AND b.ends_at>? AND (b.status="confirmed" OR (b.status="pending_payment" AND p.expires_at>?) )');
+                    $q->execute([$p['booking_id'],$p['ends_at'],$p['starts_at'],(new DateTimeImmutable())->format('Y-m-d H:i:s')]);
                     $conflict=(int)$q->fetchColumn()>0;
                     $expired=strtotime($p['expires_at'])<time();
                     if($p['status']==='pending_payment'&&!$conflict&&!$expired){
@@ -149,7 +149,7 @@ function stripeWebhook(): never {
                     $db->prepare('UPDATE bookings SET status="expired" WHERE id=?')->execute([$p['booking_id']]);
                     $db->prepare('UPDATE stripe_payments SET state="expired" WHERE booking_id=?')->execute([$p['booking_id']]);
                 }
-            } else { error_log('[stripe] unknown session '.$session['id']); }
+            } else { error_log('[stripe] unknown session '.(string)($session['id']??'')); }
         }
         $db->commit();jsonOut(['received'=>true]);
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}

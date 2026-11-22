@@ -105,7 +105,7 @@ try {
     if($action==='waitlist' && $method==='POST') waitlistCreate();
     if($action==='extraAdminData' && $method==='GET') extraAdminData();
     if($action==='stripeWebhook' && $method==='POST') stripeWebhook();
-    if($action==='createCheckout' && $method==='POST') stripeRequestBooking();
+    if($action==='createCheckout' && $method==='POST') { if(setting('PAYMENT_METHOD','onsite')!=='card') fail('支払いは当日現地払いです',409); stripeRequestBooking(); }
     if($action==='paymentStatus' && $method==='GET') stripeStatus();
     if($action==='config' && $method==='GET') jsonOut(['settings'=>prefs(),'menus'=>menus(),'admin'=>admin(),'csrf'=>csrf(),'stripe_test_enabled'=>stripeEnabled() && setting('PAYMENT_METHOD','onsite')==='card','payment_method'=>setting('PAYMENT_METHOD','onsite'),'media'=>mediaList()]);
     if($action==='availability' && $method==='GET') jsonOut(['times'=>availability((int)($_GET['menu_id']??0),(string)($_GET['date']??''))]);

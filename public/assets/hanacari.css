@@ -116,3 +116,14 @@ header nav a{font-size:13px;color:#555}
  #publicView #siteHero{padding-left:22px!important;background-position:58% center!important;background-image:linear-gradient(90deg,rgba(237,113,36,.95),rgba(241,125,42,.55)),url("https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=900&q=80")}
  #publicView #siteHero h1{font-size:34px!important}
 }
+
+
+/* Second image is visually different and separated from the hero by menus and feature cards. */
+#publicView .career-story{display:grid;grid-template-columns:1fr 1fr;overflow:hidden;margin:26px 0 30px;min-height:225px;background:#f5f8f7;border-radius:14px}
+#publicView .career-story-text{padding:30px 34px}
+#publicView .story-kicker{display:block;font-size:10px;letter-spacing:.2em;color:#2a9386;font-weight:700;margin-bottom:12px}
+#publicView .career-story h2{font-size:22px;line-height:1.4;color:#2d3334;margin:0 0 14px}
+#publicView .career-story p{font-size:13px;color:#657278;line-height:1.85;margin:0 0 16px}
+#publicView .career-story a{font-size:13px;font-weight:700;color:#278d7c}
+#publicView .career-story-photo{background-image:url("https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=900&q=80");background-size:cover;background-position:center}
+@media(max-width:650px){#publicView .career-story{grid-template-columns:1fr}#publicView .career-story-photo{min-height:170px;order:-1}#publicView .career-story-text{padding:23px}}

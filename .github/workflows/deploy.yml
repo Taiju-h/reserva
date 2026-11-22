@@ -1,7 +1,7 @@
 name: Deploy Hanamaru to UZERO
 on:
-  push:
-    branches: [main]
+  # Temporarily manual-only until SSH secrets and successful smoke tests are verified.
+  # Restore main push trigger after the first confirmed deployment.
   workflow_dispatch:
 permissions:
   contents: read

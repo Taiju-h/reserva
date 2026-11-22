@@ -23,26 +23,32 @@ function fail(string $message,int $status=400): never { jsonOut(['error'=>$messa
 function db(): PDO {
     static $pdo=null;
     if ($pdo) return $pdo;
-    global $root;
-    if (!extension_loaded('pdo_sqlite')) fail('サーバーのSQLite拡張が必要です',503);
-    $path=setting('DB_PATH','storage/reservations.sqlite');
-    if (!str_starts_with($path,'/')) $path=$root.'/'.$path;
-    if (str_contains(realpath(dirname($path)) ?: '',realpath($root.'/public') ?: '/nonexistent/public')) fail('DB保存先の設定が不正です',500);
-    $pdo=new PDO('sqlite:'.$path,null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_TIMEOUT=>5]);
-    $pdo->exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON');
-    $pdo->exec('CREATE TABLE IF NOT EXISTS menus (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT "", duration INTEGER NOT NULL, price INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1)');
-    $pdo->exec('CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, menu_id INTEGER NOT NULL REFERENCES menus(id), starts_at TEXT NOT NULL, ends_at TEXT NOT NULL, customer_name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT NOT NULL DEFAULT "", note TEXT NOT NULL DEFAULT "", status TEXT NOT NULL DEFAULT "confirmed", created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)');
-    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_bookings_times ON bookings(starts_at,ends_at,status)');
-    $pdo->exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY,value TEXT NOT NULL)');
-    if (!(int)$pdo->query('SELECT COUNT(*) FROM menus')->fetchColumn()) {
-        $pdo->prepare('INSERT INTO menus(name,description,duration,price) VALUES(?,?,?,?)')->execute(['起業・経営相談','50分の個別相談',50,5500]);
-    }
-    foreach (['site_name'=>'はなキャリ','open_time'=>'07:00','close_time'=>'22:00','slot_minutes'=>'30','closed_weekdays'=>'','closed_dates'=>'','lead_minutes'=>'60','max_advance_days'=>'90'] as $k=>$v) {
-        $pdo->prepare('INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)')->execute([$k,$v]);
-    }
+    if (setting('DB_CONNECTION') !== 'mysql') fail('DB_CONNECTION=mysql を設定してください',503);
+    if (!extension_loaded('pdo_mysql')) fail('サーバーのPDO MySQL拡張が必要です',503);
+    $host=setting('DB_HOST','mysql');
+    $port=(int)setting('DB_PORT','3306');
+    $name=setting('DB_DATABASE','hanamaru');
+    $user=setting('DB_USERNAME','hanamaru');
+    $pass=setting('DB_PASSWORD');
+    if ($host==='' || $port<1 || $port>65535 || $name==='' || $user==='' || $pass==='') fail('MySQL接続設定が不足しています',503);
+    $dsn='mysql:host='.$host.';port='.$port.';dbname='.$name.';charset=utf8mb4';
+    $pdo=new PDO($dsn,$user,$pass,[
+        PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES=>false,
+        PDO::ATTR_TIMEOUT=>5
+    ]);
+    $pdo->exec("SET time_zone = '+09:00'");
     return $pdo;
 }
-function prefs(): array { return db()->query('SELECT key,value FROM settings')->fetchAll(PDO::FETCH_KEY_PAIR); }
+function bookingLock(PDO $pdo): void {
+    $q=$pdo->query("SELECT GET_LOCK('hanamaru-booking-writes',10)");
+    if((int)$q->fetchColumn()!==1) fail('予約が混み合っています。再度お試しください',503);
+}
+function bookingUnlock(PDO $pdo): void {
+    $pdo->query("SELECT RELEASE_LOCK('hanamaru-booking-writes')");
+}
+function prefs(): array { return db()->query('SELECT `key`,`value` FROM settings')->fetchAll(PDO::FETCH_KEY_PAIR); }
 function menus(bool $onlyActive=true): array {
     return db()->query('SELECT * FROM menus'.($onlyActive?' WHERE active=1':'').' ORDER BY id DESC')->fetchAll();
 }
@@ -74,7 +80,7 @@ function availability(int $menuId,string $date): array {
     stripeDb();
     $rows=db()->prepare('SELECT b.starts_at, b.ends_at FROM bookings b
         LEFT JOIN stripe_payments sp ON sp.booking_id=b.id
-        WHERE (b.status="confirmed" OR (b.status="pending_payment" AND sp.expires_at > ?))
+        WHERE (b.status='confirmed' OR (b.status='pending_payment' AND sp.expires_at > ?))
         AND b.starts_at < ? AND b.ends_at > ?');
     $rows->execute([(new DateTimeImmutable())->format('Y-m-d H:i:s'),$end->format('Y-m-d H:i:s'),$start->format('Y-m-d H:i:s')]);
     $busy=$rows->fetchAll();$out=[];
@@ -122,7 +128,7 @@ try {
         $name=trim((string)($v['name']??''));$email=trim((string)($v['email']??''));$phone=trim((string)($v['phone']??''));$note=trim((string)($v['note']??''));
         if(mb_strlen($name)<1 || mb_strlen($name)>100 || !filter_var($email,FILTER_VALIDATE_EMAIL) || strlen($email)>254 || strlen($phone)>40 || mb_strlen($note)>1000) fail('入力内容をご確認ください');
         if(!preg_match('/^\d\d:\d\d$/',$time)) fail('時間が不正です');
-        $pdo=db();$pdo->exec('BEGIN IMMEDIATE');
+        $pdo=db();bookingLock($pdo);$pdo->beginTransaction();
         try {
             if(!in_array($time,availability($id,$date),true)) { $pdo->rollBack();fail('この時間は満席です。別の時間を選択してください',409); }
             $stmt=$pdo->prepare('SELECT duration FROM menus WHERE id=? AND active=1');$stmt->execute([$id]);$duration=(int)$stmt->fetchColumn();
@@ -131,6 +137,7 @@ try {
             $insert->execute([$id,$begin->format('Y-m-d H:i:s'),$begin->modify('+'.$duration.' minutes')->format('Y-m-d H:i:s'),$name,$email,$phone,$note]);
             $bookingId=(int)$pdo->lastInsertId();$pdo->commit();jsonOut(['ok'=>true,'booking_id'=>$bookingId]);
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+        finally {bookingUnlock($pdo);}
     }
     if($action==='adminData' && $method==='GET'){
         requireAdmin();$q=db()->query('SELECT b.*,m.name AS menu_name FROM bookings b JOIN menus m ON m.id=b.menu_id ORDER BY b.starts_at DESC LIMIT 500');
@@ -157,7 +164,7 @@ try {
             if($key==='closed_dates' && $val!=='' && (strlen($val)>3000 || !preg_match('/^\\d{4}-\\d{2}-\\d{2}(,\\d{4}-\\d{2}-\\d{2})*$/',$val))) fail('休業日の形式が不正です');
             if($key==='lead_minutes' && (!ctype_digit($val)|| (int)$val>10080)) fail('受付締切時間が不正です');
             if($key==='max_advance_days' && (!ctype_digit($val) || (int)$val<1 || (int)$val>365)) fail('予約受付期間が不正です');
-            $stmt=db()->prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');$stmt->execute([$key,$val]);
+            $stmt=db()->prepare('INSERT INTO settings(`key`,`value`) VALUES(?,?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)');$stmt->execute([$key,$val]);
         }
         jsonOut(['ok'=>true]);
     }
@@ -172,13 +179,14 @@ try {
                 $check=$pdo->prepare('SELECT state FROM stripe_payments WHERE booking_id=?');
                 $check->execute([$id]);$paymentState=$check->fetchColumn();
                 if($paymentState!==false && $paymentState!=='paid'){ $pdo->rollBack();fail('決済未完了のため確定できません',409); }
-                $stmt=$pdo->prepare('SELECT count(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND (b.status="confirmed" OR (b.status="pending_payment" AND p.expires_at>?)) AND b.starts_at<? AND b.ends_at>?');
+                $stmt=$pdo->prepare('SELECT count(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND (b.status='confirmed' OR (b.status='pending_payment' AND p.expires_at>?)) AND b.starts_at<? AND b.ends_at>?');
                 $stmt->execute([$id,(new DateTimeImmutable())->format('Y-m-d H:i:s'),$b['ends_at'],$b['starts_at']]);
                 if((int)$stmt->fetchColumn()>0){$pdo->rollBack();fail('別の予約と重複します',409);}
             }
             $stmt=$pdo->prepare('UPDATE bookings SET status=? WHERE id=?');$stmt->execute([$status,$id]);
             $pdo->commit();jsonOut(['ok'=>true]);
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+        finally {bookingUnlock($pdo);}
     }
     if($action!=='') fail('APIが見つかりません',404);
 }catch(Throwable $e){error_log('[reserva] '.$e->getMessage());fail('処理に失敗しました。管理者にお問い合わせください',500);}

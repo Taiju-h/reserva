@@ -9,10 +9,36 @@ services:
     volumes:
       - ./:/var/www/html:ro
       - ./storage:/var/www/html/storage:rw
+    depends_on:
+      mysql:
+        condition: service_healthy
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "php -r 'exit(extension_loaded(\"pdo_sqlite\") && extension_loaded(\"sqlite3\") && extension_loaded(\"mbstring\") && extension_loaded(\"curl\") ? 0 : 1);'"]
+      test: ["CMD-SHELL", "php -r 'exit(extension_loaded(\"pdo_mysql\") && extension_loaded(\"mbstring\") && extension_loaded(\"curl\") ? 0 : 1);'"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        format: raw
+    entrypoint: ["/bin/sh", "/docker/mysql-entrypoint.sh"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./ops/mysql-entrypoint.sh:/docker/mysql-entrypoint.sh:ro
+      - ./ops/schema.mysql.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    command: []
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  mysql-data:

@@ -80,7 +80,7 @@ function availability(int $menuId,string $date): array {
     stripeDb();
     $rows=db()->prepare('SELECT b.starts_at, b.ends_at FROM bookings b
         LEFT JOIN stripe_payments sp ON sp.booking_id=b.id
-        WHERE (b.status='confirmed' OR (b.status='pending_payment' AND sp.expires_at > ?))
+        WHERE (b.status=\'confirmed\' OR (b.status=\'pending_payment\' AND sp.expires_at > ?))
         AND b.starts_at < ? AND b.ends_at > ?');
     $rows->execute([(new DateTimeImmutable())->format('Y-m-d H:i:s'),$end->format('Y-m-d H:i:s'),$start->format('Y-m-d H:i:s')]);
     $busy=$rows->fetchAll();$out=[];
@@ -179,7 +179,7 @@ try {
                 $check=$pdo->prepare('SELECT state FROM stripe_payments WHERE booking_id=?');
                 $check->execute([$id]);$paymentState=$check->fetchColumn();
                 if($paymentState!==false && $paymentState!=='paid'){ $pdo->rollBack();fail('決済未完了のため確定できません',409); }
-                $stmt=$pdo->prepare('SELECT count(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND (b.status='confirmed' OR (b.status='pending_payment' AND p.expires_at>?)) AND b.starts_at<? AND b.ends_at>?');
+                $stmt=$pdo->prepare('SELECT count(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND (b.status=\'confirmed\' OR (b.status=\'pending_payment\' AND p.expires_at>?)) AND b.starts_at<? AND b.ends_at>?');
                 $stmt->execute([$id,(new DateTimeImmutable())->format('Y-m-d H:i:s'),$b['ends_at'],$b['starts_at']]);
                 if((int)$stmt->fetchColumn()>0){$pdo->rollBack();fail('別の予約と重複します',409);}
             }

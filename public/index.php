@@ -105,9 +105,9 @@ try {
     if($action==='waitlist' && $method==='POST') waitlistCreate();
     if($action==='extraAdminData' && $method==='GET') extraAdminData();
     if($action==='stripeWebhook' && $method==='POST') stripeWebhook();
-    if($action==='createCheckout' && $method==='POST') { if(setting('PAYMENT_METHOD','onsite')!=='card') fail('支払いは当日現地払いです',409); stripeRequestBooking(); }
+    if($action==='createCheckout' && $method==='POST') stripeRequestBooking();
     if($action==='paymentStatus' && $method==='GET') stripeStatus();
-    if($action==='config' && $method==='GET') jsonOut(['settings'=>prefs(),'menus'=>menus(),'admin'=>admin(),'csrf'=>csrf(),'stripe_test_enabled'=>stripeEnabled() && setting('PAYMENT_METHOD','onsite')==='card','payment_method'=>setting('PAYMENT_METHOD','onsite'),'media'=>mediaList()]);
+    if($action==='config' && $method==='GET') jsonOut(['settings'=>prefs(),'menus'=>menus(),'admin'=>admin(),'csrf'=>csrf(),'stripe_test_enabled'=>stripeEnabled(),'payment_method'=>'card','media'=>mediaList()]);
     if($action==='availability' && $method==='GET') jsonOut(['times'=>availability((int)($_GET['menu_id']??0),(string)($_GET['date']??''))]);
     if($action==='login' && $method==='POST'){
         checkCsrf();$data=body();$hash=setting('ADMIN_PASSWORD_HASH');
@@ -125,9 +125,7 @@ try {
     }
     if($action==='logout' && $method==='POST'){checkCsrf();$_SESSION=[];session_destroy();jsonOut(['ok'=>true]);}
     if($action==='book' && $method==='POST'){
-        if(setting('PAYMENT_METHOD','onsite')==='card' && stripeEnabled()) fail('カード決済画面から予約を確定してください',409);
-        // When card checkout is disabled, paid services accept an application for manual review.
-        // This is NOT payment completion or a confirmed appointment.
+        if(stripeEnabled()) fail('有料メニューはカード決済画面からお申し込みください',409);
         if(time()-(int)($_SESSION['last_booking_request_at']??0)<60) fail('連続申込みは1分ほど空けてください',429);
         checkCsrf();$v=body();
         $id=(int)($v['menu_id']??0);$date=(string)($v['date']??'');$time=(string)($v['time']??'');
@@ -139,13 +137,14 @@ try {
             if(!in_array($time,availability($id,$date),true)) { $pdo->rollBack();fail('この時間は満席です。別の時間を選択してください',409); }
             $stmt=$pdo->prepare('SELECT duration,price FROM menus WHERE id=? AND active=1');$stmt->execute([$id]);$menu=$stmt->fetch();
             if(!$menu) {$pdo->rollBack();fail('メニューがありません',404);}
-            $duration=(int)$menu['duration'];$isPaid=(int)$menu['price']>0; // Collection occurs on site, not on booking.
+            $duration=(int)$menu['duration'];
+            if((int)$menu['price']>0){$pdo->rollBack();fail('オンライン決済を準備中です。現在、有料メニューの申込みは受け付けられません',503);}
             $begin=new DateTimeImmutable($date.' '.$time);
             $insert=$pdo->prepare('INSERT INTO bookings(menu_id,starts_at,ends_at,customer_name,email,phone,note,status) VALUES(?,?,?,?,?,?,?,?)');
             $insert->execute([$id,$begin->format('Y-m-d H:i:s'),$begin->modify('+'.$duration.' minutes')->format('Y-m-d H:i:s'),$name,$email,$phone,$note,'confirmed']);
             $bookingId=(int)$pdo->lastInsertId();$pdo->commit();
             $_SESSION['last_booking_request_at']=time();
-            jsonOut(['ok'=>true,'booking_id'=>$bookingId,'status'=>'confirmed','payment_method'=>'onsite','payment_received'=>false]);
+            jsonOut(['ok'=>true,'booking_id'=>$bookingId,'status'=>'confirmed','payment_method'=>'free','payment_received'=>false]);
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
         finally {bookingUnlock($pdo);}
     }
@@ -291,7 +290,7 @@ function showMenus(){ $('menus').innerHTML=cfg.menus.map(m=>'<button type="butto
 async function loadTimes(){pickedTime='';$('bookBtn').disabled=true;selection();if(!pickedMenu || !$('date').value){$('times').textContent='メニューと日付を選んでください';return;}$('customerStep').classList.add('hidden'); $('times').textContent='読み込み中…';try{const date=$('date').value;const d=await api('availability',{menu_id:pickedMenu,date});if(date!==$('date').value)return;$('times').innerHTML=d.times.map(t=>'<button type="button" data-time="'+t+'">'+t+'</button>').join('')||'<p class="muted">この日は空き枠がありません。</p>';document.querySelectorAll('[data-time]').forEach(btn=>btn.onclick=()=>{$('customerStep').classList.remove('hidden');pickedTime=btn.dataset.time;document.querySelectorAll('[data-time]').forEach(x=>x.classList.toggle('chosen',x===btn));$('bookBtn').disabled=false;selection();});}catch(e){error('times',e);}}
 function selection(){let menu=cfg.menus?.find(m=>Number(m.id)===pickedMenu);$('selection').textContent=menu&&pickedTime?menu.name+' / '+$('date').value+' '+pickedTime+' / '+Number(menu.price).toLocaleString('ja-JP')+'円':'';}
 async function init(){try{cfg=await api('config');csrfToken=cfg.csrf;$('brand').textContent=cfg.settings.site_name;$('siteTitle').textContent=cfg.settings.site_name;let adminRoute=location.pathname.replace(/\/$/,'')==='/admin';$('publicView').classList.toggle('hidden',adminRoute);$('adminView').classList.toggle('hidden',!adminRoute);if(adminRoute){if(cfg.admin)await dashboard();return;}if(window.initSiteExtras)window.initSiteExtras();if(cfg.stripe_test_enabled){$('bookBtn').textContent='Stripeテスト決済に進む';}
-else { $('bookBtn').textContent='予約を確定する（料金は当日現地払い）'; }
+else { $('bookBtn').textContent='予約・オンライン決済は準備中'; }
 if(new URLSearchParams(location.search).has('payment')){
     let p=new URLSearchParams(location.search);
     const msg=document.createElement('div');msg.className='notice';msg.id='paymentNotice';
@@ -307,9 +306,9 @@ if(new URLSearchParams(location.search).has('payment')){
     $('publicView').insertBefore(msg,$('publicView').children[1]);
 }
 $('date').min=today();$('date').value=today();showMenus();$('date').onchange=loadTimes;}catch(e){alert(e.message);}}
-$('bookingForm').onsubmit=async e=>{e.preventDefault();if(!pickedMenu||!pickedTime)return;let data=Object.fromEntries(new FormData(e.target));$('bookBtn').disabled=true;$('bookingError').innerHTML='';try{const result=await api(cfg.stripe_test_enabled?'createCheckout':'book',{}, {...data,menu_id:pickedMenu,date:$('date').value,time:pickedTime});
+$('bookingForm').onsubmit=async e=>{e.preventDefault();if(!pickedMenu||!pickedTime)return;let data=Object.fromEntries(new FormData(e.target));$('bookBtn').disabled=true;$('bookingError').innerHTML='';try{const menu=cfg.menus.find(m=>Number(m.id)===pickedMenu);const paid=Number(menu?.price||0)>0;if(paid&&!cfg.stripe_test_enabled)throw new Error('カード決済がまだ設定されていないため、現在は申し込めません。');const result=await api(paid?'createCheckout':'book',{}, {...data,menu_id:pickedMenu,date:$('date').value,time:pickedTime});
 if(result.checkout_url){window.location.assign(result.checkout_url);return;}
-$('bookingForm').innerHTML='<div class="notice"><h2>予約が確定しました</h2><p>予約番号: '+result.booking_id+'</p><p>料金は相談当日に現地でお支払いください。</p><p>現在、自動確認メールは送信されません。予約番号と日時を控えてください。</p></div>';loadTimes();}catch(err){error('bookingError',err);$('bookBtn').disabled=false;}};
+$('bookingForm').innerHTML='<div class="notice"><h2>予約が確定しました</h2><p>予約番号: '+result.booking_id+'</p><p>現在、自動確認メールは送信されません。予約番号と日時を控えてください。</p></div>';loadTimes();}catch(err){error('bookingError',err);$('bookBtn').disabled=false;}};
 $('loginForm').onsubmit=async e=>{e.preventDefault();try{await api('login',{}, {password:$('password').value});$('password').value='';await dashboard();}catch(err){error('loginError',err);}};
 async function dashboard(){const d=await api('adminData');$('loginPanel').classList.add('hidden');$('dashboard').classList.remove('hidden');
 $('bookings').innerHTML=d.bookings.map(b=>'<tr><td>'+b.id+'</td><td>'+esc(b.starts_at)+'</td><td>'+esc(b.menu_name)+'</td><td>'+esc(b.customer_name)+'</td><td>'+esc(b.email)+'<br>'+esc(b.phone)+'</td><td>'+esc(b.status==='pending_review'?'申込み・確認待ち':b.status)+'</td><td><button class="secondary" data-book="'+b.id+'" data-status="'+(b.status==='confirmed'?'cancelled':'confirmed')+'">'+(b.status==='confirmed'?'取消':b.status==='pending_review'?'申込みを確定':'復帰')+'</button></td></tr>').join('');

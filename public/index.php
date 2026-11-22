@@ -146,6 +146,31 @@ try {
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
         finally {bookingUnlock($pdo);}
     }
+    if($action==='adminBook' && $method==='POST'){
+        requireAdmin();checkCsrf();$v=body();
+        $menuId=(int)($v['menu_id']??0);$date=(string)($v['date']??'');
+        $time=(string)($v['time']??'');$name=trim((string)($v['name']??''));
+        $email=trim((string)($v['email']??''));
+        $phone=trim((string)($v['phone']??''));
+        $note=trim((string)($v['note']??''));
+        if(!dateValid($date)||!preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/',$time)
+            ||mb_strlen($name)<1||mb_strlen($name)>100||!filter_var($email,FILTER_VALIDATE_EMAIL)
+            ||strlen($email)>254||strlen($phone)>40||mb_strlen($note)>1000) fail('予約情報が不正です');
+        $pdo=db();bookingLock($pdo);$pdo->beginTransaction();
+        try{
+            if(!in_array($time,availability($menuId,$date),true)){
+                $pdo->rollBack();fail('その時間は予約できません',409);
+            }
+            $q=$pdo->prepare('SELECT duration FROM menus WHERE id=? AND active=1');
+            $q->execute([$menuId]);$duration=(int)$q->fetchColumn();
+            $from=new DateTimeImmutable($date.' '.$time);
+            $to=$from->modify('+'.$duration.' minutes');
+            $q=$pdo->prepare('INSERT INTO bookings(menu_id,starts_at,ends_at,customer_name,email,phone,note,status) VALUES(?,?,?,?,?,?,?,?)');
+            $q->execute([$menuId,$from->format('Y-m-d H:i:s'),$to->format('Y-m-d H:i:s'),$name,$email,$phone,$note,'confirmed']);
+            $id=(int)$pdo->lastInsertId();$pdo->commit();jsonOut(['ok'=>true,'booking_id'=>$id]);
+        }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+        finally {bookingUnlock($pdo);}
+    }
     if($action==='adminData' && $method==='GET'){
         requireAdmin();$q=db()->query('SELECT b.*,m.name AS menu_name FROM bookings b JOIN menus m ON m.id=b.menu_id ORDER BY b.starts_at DESC LIMIT 500');
         jsonOut(['menus'=>menus(false),'settings'=>prefs(),'bookings'=>$q->fetchAll()]);
@@ -211,6 +236,12 @@ try {
 <main id="adminView" class="hidden"><div class="hero"><h1>予約管理</h1><p>予約・メニュー・営業時間を管理します。</p></div>
 <section id="loginPanel" class="panel"><h2>管理者ログイン</h2><form id="loginForm"><label>管理者パスワード</label><input type="password" id="password" required><p id="loginError"></p><button>ログイン</button></form></section>
 <div id="dashboard" class="hidden"><section class="panel"><div class="actions"><h2 style="margin-right:auto">予約一覧（最新500件）</h2><button class="secondary" id="refresh">更新</button><button class="secondary" id="logout">ログアウト</button></div><div class="scroll"><table><thead><tr><th>ID</th><th>日時</th><th>メニュー</th><th>お名前</th><th>連絡先</th><th>状態</th><th>操作</th></tr></thead><tbody id="bookings"></tbody></table></div></section>
+<section class="panel"><h2>管理者による予約登録</h2><form id="adminBookingForm">
+<div class="row"><div><label>メニュー</label><select name="menu_id" id="adminBookMenu" required></select></div><div><label>日付</label><input type="date" name="date" required></div></div>
+<div class="row"><div><label>時間（例 10:00）</label><input type="time" name="time" required></div><div><label>お名前</label><input name="name" maxlength="100" required></div></div>
+<div class="row"><div><label>メール</label><input type="email" name="email" maxlength="254" required></div><div><label>電話番号</label><input name="phone" maxlength="40"></div></div>
+<label>備考</label><textarea name="note" maxlength="1000"></textarea>
+<button type="submit">予約を登録</button><p id="adminBookResult"></p></form></section>
 <section class="panel"><h2>予約カレンダー・顧客検索</h2><div id="operations"></div></section><section class="panel"><h2>予約メニュー設定</h2><div id="menuEditor"></div><h3>メニュー追加・編集</h3><form id="menuForm"><input type="hidden" name="id"><label>メニュー名</label><input name="name" required maxlength="100"><label>説明</label><textarea name="description" maxlength="2000"></textarea><div class="row"><div><label>所要時間（分）</label><input name="duration" type="number" min="5" max="600" value="50" required></div><div><label>価格（円）</label><input name="price" type="number" min="0" value="5500" required></div></div><label><input style="width:auto" type="checkbox" name="active" checked> 公開する</label><button>保存</button> <button type="button" class="secondary" id="resetMenu">新規入力</button></form></section>
 <section class="panel"><h2>写真・画像管理</h2>
 <p class="muted">トップ画像1枚、メニューごとに最大20枚。JPEG・PNG・WebP、各5MBまで。</p>

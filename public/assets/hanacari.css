@@ -91,3 +91,28 @@ header nav a{font-size:13px;color:#555}
 #publicView .guidance-card p{font-size:12px;color:#737d82;line-height:1.7}
 #publicView .guidance-card a{display:inline-block;color:#158978;font-size:13px;font-weight:700;margin-top:8px}
 @media(max-width:700px){#publicView .career-features{grid-template-columns:1fr;padding:22px 18px;gap:12px}#publicView .feature-list{grid-template-columns:1fr 1fr 1fr}#publicView .feature-item{padding:8px 2px}#publicView .feature-item strong{font-size:11px}#publicView .career-guidance{grid-template-columns:1fr}#publicView .guidance-card{padding:20px}}
+
+
+/* Real photograph now rendered on the site; photos are spaced far apart. 
+   Source: Unsplash https://unsplash.com/photos/ - photo-1551836022-d5d88e9218df */
+#publicView #siteHero {
+  position:relative;
+  overflow:hidden;
+  background-image:linear-gradient(90deg,rgba(237,113,36,.94) 0%,rgba(241,125,42,.85) 34%,rgba(241,125,42,.12) 75%),url("https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=1800&q=85")!important;
+  background-size:cover!important;
+  background-position:center 45%!important;
+  align-items:flex-start!important;
+  text-align:left!important;
+  padding-left:52px!important;
+  border-radius:10px!important;
+}
+#publicView #siteHero .eyebrow,#publicView #siteHero h1,#publicView #siteHero p:last-child{position:relative;z-index:1;max-width:440px;text-shadow:0 1px 8px rgba(50,30,10,.24)}
+#publicView #siteHero h1{font-size:46px!important}
+#publicView #siteHero p:last-child{font-weight:600}
+#publicView .career-guidance{margin-top:24px}
+#publicView .career-guidance .guidance-card:first-child{background:linear-gradient(180deg,#fff 0%,#fff9f5 100%)}
+#publicView .career-features .feature-icon{font-size:27px}
+@media(max-width:650px){
+ #publicView #siteHero{padding-left:22px!important;background-position:58% center!important;background-image:linear-gradient(90deg,rgba(237,113,36,.95),rgba(241,125,42,.55)),url("https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=900&q=80")!important}
+ #publicView #siteHero h1{font-size:34px!important}
+}

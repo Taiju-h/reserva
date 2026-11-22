@@ -71,8 +71,12 @@ function availability(int $menuId,string $date): array {
     if($end<=$start) return [];
     $step=max(5,min(120,(int)($s['slot_minutes']??30)));
     $duration=(int)$m['duration'];$now=new DateTimeImmutable('now',$tz);
-    $rows=db()->prepare('SELECT starts_at, ends_at FROM bookings WHERE status="confirmed" AND starts_at < ? AND ends_at > ?');
-    $rows->execute([$end->format('Y-m-d H:i:s'),$start->format('Y-m-d H:i:s')]);
+    stripeDb();
+    $rows=db()->prepare('SELECT b.starts_at, b.ends_at FROM bookings b
+        LEFT JOIN stripe_payments sp ON sp.booking_id=b.id
+        WHERE (b.status="confirmed" OR (b.status="pending_payment" AND sp.expires_at > ?))
+        AND b.starts_at < ? AND b.ends_at > ?');
+    $rows->execute([(new DateTimeImmutable())->format('Y-m-d H:i:s'),$end->format('Y-m-d H:i:s'),$start->format('Y-m-d H:i:s')]);
     $busy=$rows->fetchAll();$out=[];
     for($t=$start;$t->modify('+'.$duration.' minutes')<=$end;$t=$t->modify('+'.$step.' minutes')){
         if($t<$now->modify('+'.$leadMinutes.' minutes')) continue;
@@ -83,10 +87,14 @@ function availability(int $menuId,string $date): array {
     }
     return $out;
 }
+require_once $root.'/app/stripe.php';
 $action=(string)($_GET['action']??'');
 $method=$_SERVER['REQUEST_METHOD']??'GET';
 try {
-    if($action==='config' && $method==='GET') jsonOut(['settings'=>prefs(),'menus'=>menus(),'admin'=>admin(),'csrf'=>csrf()]);
+    if($action==='stripeWebhook' && $method==='POST') stripeWebhook();
+    if($action==='createCheckout' && $method==='POST') stripeRequestBooking();
+    if($action==='paymentStatus' && $method==='GET') stripeStatus();
+    if($action==='config' && $method==='GET') jsonOut(['settings'=>prefs(),'menus'=>menus(),'admin'=>admin(),'csrf'=>csrf(),'stripe_test_enabled'=>stripeEnabled()]);
     if($action==='availability' && $method==='GET') jsonOut(['times'=>availability((int)($_GET['menu_id']??0),(string)($_GET['date']??''))]);
     if($action==='login' && $method==='POST'){
         checkCsrf();$data=body();$hash=setting('ADMIN_PASSWORD_HASH');
@@ -104,6 +112,7 @@ try {
     }
     if($action==='logout' && $method==='POST'){checkCsrf();$_SESSION=[];session_destroy();jsonOut(['ok'=>true]);}
     if($action==='book' && $method==='POST'){
+        if(stripeEnabled()) fail('カード決済画面から予約を確定してください',409);
         checkCsrf();$v=body();
         $id=(int)($v['menu_id']??0);$date=(string)($v['date']??'');$time=(string)($v['time']??'');
         $name=trim((string)($v['name']??''));$email=trim((string)($v['email']??''));$phone=trim((string)($v['phone']??''));$note=trim((string)($v['note']??''));
@@ -156,8 +165,11 @@ try {
             $stmt=$pdo->prepare('SELECT * FROM bookings WHERE id=?');$stmt->execute([$id]);$b=$stmt->fetch();
             if(!$b){$pdo->rollBack();fail('予約がありません',404);}
             if($status==='confirmed'){
-                $stmt=$pdo->prepare('SELECT count(*) FROM bookings WHERE id<>? AND status="confirmed" AND starts_at<? AND ends_at>?');
-                $stmt->execute([$id,$b['ends_at'],$b['starts_at']]);
+                $check=$pdo->prepare('SELECT state FROM stripe_payments WHERE booking_id=?');
+                $check->execute([$id]);$paymentState=$check->fetchColumn();
+                if($paymentState!==false && $paymentState!=='paid'){ $pdo->rollBack();fail('決済未完了のため確定できません',409); }
+                $stmt=$pdo->prepare('SELECT count(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND (b.status="confirmed" OR (b.status="pending_payment" AND p.expires_at>?)) AND b.starts_at<? AND b.ends_at>?');
+                $stmt->execute([$id,(new DateTimeImmutable())->format('Y-m-d H:i:s'),$b['ends_at'],$b['starts_at']]);
                 if((int)$stmt->fetchColumn()>0){$pdo->rollBack();fail('別の予約と重複します',409);}
             }
             $stmt=$pdo->prepare('UPDATE bookings SET status=? WHERE id=?');$stmt->execute([$status,$id]);
@@ -198,8 +210,25 @@ function today(){let parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo
 function showMenus(){ $('menus').innerHTML=cfg.menus.map(m=>'<button type="button" class="menu '+(pickedMenu===Number(m.id)?'selected':'')+'" data-id="'+m.id+'"><b>'+esc(m.name)+'</b>'+esc(m.description)+'<small>'+Number(m.duration)+'分 ・ '+Number(m.price).toLocaleString('ja-JP')+'円</small></button>').join('')||'予約メニューがありません';document.querySelectorAll('.menu').forEach(el=>el.onclick=()=>{pickedMenu=Number(el.dataset.id);pickedTime='';showMenus();loadTimes();});}
 async function loadTimes(){pickedTime='';$('bookBtn').disabled=true;selection();if(!pickedMenu || !$('date').value){$('times').textContent='メニューと日付を選んでください';return;} $('times').textContent='読み込み中…';try{const date=$('date').value;const d=await api('availability',{menu_id:pickedMenu,date});if(date!==$('date').value)return;$('times').innerHTML=d.times.map(t=>'<button type="button" data-time="'+t+'">'+t+'</button>').join('')||'<p class="muted">この日は空き枠がありません。</p>';document.querySelectorAll('[data-time]').forEach(btn=>btn.onclick=()=>{pickedTime=btn.dataset.time;document.querySelectorAll('[data-time]').forEach(x=>x.classList.toggle('chosen',x===btn));$('bookBtn').disabled=false;selection();});}catch(e){error('times',e);}}
 function selection(){let menu=cfg.menus?.find(m=>Number(m.id)===pickedMenu);$('selection').textContent=menu&&pickedTime?menu.name+' / '+$('date').value+' '+pickedTime+' / '+Number(menu.price).toLocaleString('ja-JP')+'円':'';}
-async function init(){try{cfg=await api('config');csrfToken=cfg.csrf;$('brand').textContent=cfg.settings.site_name;$('siteTitle').textContent=cfg.settings.site_name+' 予約受付';let adminRoute=location.pathname.replace(/\/$/,'')==='/admin';$('publicView').classList.toggle('hidden',adminRoute);$('adminView').classList.toggle('hidden',!adminRoute);if(adminRoute){if(cfg.admin)await dashboard();return;}$('date').min=today();$('date').value=today();showMenus();$('date').onchange=loadTimes;}catch(e){alert(e.message);}}
-$('bookingForm').onsubmit=async e=>{e.preventDefault();if(!pickedMenu||!pickedTime)return;let data=Object.fromEntries(new FormData(e.target));$('bookBtn').disabled=true;$('bookingError').innerHTML='';try{const result=await api('book',{}, {...data,menu_id:pickedMenu,date:$('date').value,time:pickedTime});$('bookingForm').innerHTML='<div class="notice"><h2>予約を受け付けました</h2><p>予約番号: '+result.booking_id+'</p><p>予約内容を控えてください。現在、自動メール送信は未設定です。</p></div>';loadTimes();}catch(err){error('bookingError',err);$('bookBtn').disabled=false;}};
+async function init(){try{cfg=await api('config');csrfToken=cfg.csrf;$('brand').textContent=cfg.settings.site_name;$('siteTitle').textContent=cfg.settings.site_name+' 予約受付';let adminRoute=location.pathname.replace(/\/$/,'')==='/admin';$('publicView').classList.toggle('hidden',adminRoute);$('adminView').classList.toggle('hidden',!adminRoute);if(adminRoute){if(cfg.admin)await dashboard();return;}if(cfg.stripe_test_enabled){$('bookBtn').textContent='Stripeテスト決済に進む';}
+if(new URLSearchParams(location.search).has('payment')){
+    let p=new URLSearchParams(location.search);
+    const msg=document.createElement('div');msg.className='notice';msg.id='paymentNotice';
+    if(p.get('payment')==='success'&&p.get('session_id')){
+      msg.textContent='決済結果を確認しています…';
+      const session=p.get('session_id');
+      const check=async()=>{try{
+        const data=await api('paymentStatus',{session_id:session});
+        msg.textContent=data.status==='confirmed'?'テスト決済を確認しました。予約が確定しました。':data.payment_state==='needs_refund'?'決済を受け付けましたが予約確定できませんでした。運営へ連絡してください。':'決済結果を確認中です。しばらくして画面を更新してください。';
+      }catch(e){msg.textContent='決済結果を取得できません。運営へお問い合わせください。';}};
+      check();
+    }else{msg.textContent='決済が中断されました。予約は確定していません。';}
+    $('publicView').insertBefore(msg,$('publicView').children[1]);
+}
+$('date').min=today();$('date').value=today();showMenus();$('date').onchange=loadTimes;}catch(e){alert(e.message);}}
+$('bookingForm').onsubmit=async e=>{e.preventDefault();if(!pickedMenu||!pickedTime)return;let data=Object.fromEntries(new FormData(e.target));$('bookBtn').disabled=true;$('bookingError').innerHTML='';try{const result=await api(cfg.stripe_test_enabled?'createCheckout':'book',{}, {...data,menu_id:pickedMenu,date:$('date').value,time:pickedTime});
+if(result.checkout_url){window.location.assign(result.checkout_url);return;}
+$('bookingForm').innerHTML='<div class="notice"><h2>予約を受け付けました</h2><p>予約番号: '+result.booking_id+'</p><p>予約内容を控えてください。現在、自動メール送信は未設定です。</p></div>';loadTimes();}catch(err){error('bookingError',err);$('bookBtn').disabled=false;}};
 $('loginForm').onsubmit=async e=>{e.preventDefault();try{await api('login',{}, {password:$('password').value});$('password').value='';await dashboard();}catch(err){error('loginError',err);}};
 async function dashboard(){const d=await api('adminData');$('loginPanel').classList.add('hidden');$('dashboard').classList.remove('hidden');
 $('bookings').innerHTML=d.bookings.map(b=>'<tr><td>'+b.id+'</td><td>'+esc(b.starts_at)+'</td><td>'+esc(b.menu_name)+'</td><td>'+esc(b.customer_name)+'</td><td>'+esc(b.email)+'<br>'+esc(b.phone)+'</td><td>'+esc(b.status)+'</td><td><button class="secondary" data-book="'+b.id+'" data-status="'+(b.status==='confirmed'?'cancelled':'confirmed')+'">'+(b.status==='confirmed'?'取消':'復帰')+'</button></td></tr>').join('');

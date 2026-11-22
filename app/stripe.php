@@ -121,7 +121,7 @@ function stripeWebhook(): never {
                     && (int)($session['amount_total']??-1)===(int)$p['amount_jpy']
                     && (string)($session['client_reference_id']??'')===(string)$p['booking_id'];
                 if($paid){
-                    $q=$db->prepare('SELECT COUNT(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND b.starts_at<? AND b.ends_at>? AND (b.status=\'confirmed\' OR (b.status=\'pending_payment\' AND p.expires_at>?) )');
+                    $q=$db->prepare('SELECT COUNT(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND b.starts_at<? AND b.ends_at>? AND (b.status IN (\'confirmed\',\'pending_review\') OR (b.status=\'pending_payment\' AND p.expires_at>?) )');
                     $q->execute([$p['booking_id'],$p['ends_at'],$p['starts_at'],(new DateTimeImmutable())->format('Y-m-d H:i:s')]);
                     $conflict=(int)$q->fetchColumn()>0;
                     $expired=strtotime($p['expires_at'])<time();

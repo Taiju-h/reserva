@@ -113,6 +113,10 @@ try {
     if($action==='logout' && $method==='POST'){checkCsrf();$_SESSION=[];session_destroy();jsonOut(['ok'=>true]);}
     if($action==='book' && $method==='POST'){
         if(stripeEnabled()) fail('カード決済画面から予約を確定してください',409);
+        $paidMenu=db()->prepare('SELECT price FROM menus WHERE id=? AND active=1');
+        $paidMenu->execute([(int)(body()['menu_id']??0)]);
+        $price=$paidMenu->fetchColumn();
+        if($price===false || (int)$price>0) fail('有料メニューはカード決済の設定が必要です',503);
         checkCsrf();$v=body();
         $id=(int)($v['menu_id']??0);$date=(string)($v['date']??'');$time=(string)($v['time']??'');
         $name=trim((string)($v['name']??''));$email=trim((string)($v['email']??''));$phone=trim((string)($v['phone']??''));$note=trim((string)($v['note']??''));
@@ -211,6 +215,7 @@ function showMenus(){ $('menus').innerHTML=cfg.menus.map(m=>'<button type="butto
 async function loadTimes(){pickedTime='';$('bookBtn').disabled=true;selection();if(!pickedMenu || !$('date').value){$('times').textContent='メニューと日付を選んでください';return;} $('times').textContent='読み込み中…';try{const date=$('date').value;const d=await api('availability',{menu_id:pickedMenu,date});if(date!==$('date').value)return;$('times').innerHTML=d.times.map(t=>'<button type="button" data-time="'+t+'">'+t+'</button>').join('')||'<p class="muted">この日は空き枠がありません。</p>';document.querySelectorAll('[data-time]').forEach(btn=>btn.onclick=()=>{pickedTime=btn.dataset.time;document.querySelectorAll('[data-time]').forEach(x=>x.classList.toggle('chosen',x===btn));$('bookBtn').disabled=false;selection();});}catch(e){error('times',e);}}
 function selection(){let menu=cfg.menus?.find(m=>Number(m.id)===pickedMenu);$('selection').textContent=menu&&pickedTime?menu.name+' / '+$('date').value+' '+pickedTime+' / '+Number(menu.price).toLocaleString('ja-JP')+'円':'';}
 async function init(){try{cfg=await api('config');csrfToken=cfg.csrf;$('brand').textContent=cfg.settings.site_name;$('siteTitle').textContent=cfg.settings.site_name+' 予約受付';let adminRoute=location.pathname.replace(/\/$/,'')==='/admin';$('publicView').classList.toggle('hidden',adminRoute);$('adminView').classList.toggle('hidden',!adminRoute);if(adminRoute){if(cfg.admin)await dashboard();return;}if(cfg.stripe_test_enabled){$('bookBtn').textContent='Stripeテスト決済に進む';}
+else { $('bookBtn').textContent='予約を確定する（有料メニューは決済準備中）'; }
 if(new URLSearchParams(location.search).has('payment')){
     let p=new URLSearchParams(location.search);
     const msg=document.createElement('div');msg.className='notice';msg.id='paymentNotice';

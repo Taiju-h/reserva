@@ -36,6 +36,10 @@ window.initSiteExtras=function(){
   };
 };
 window.refreshSiteExtras=async function(){
+  const ab=el('adminBookingForm');
+  const abs=el('adminBookMenu');
+  if(abs)abs.innerHTML=cfg.menus.map(m=>'<option value="'+Number(m.id)+'">'+escapeHtml(m.name)+'</option>').join('');
+  if(ab && !ab.dataset.bound){ab.dataset.bound='1';ab.onsubmit=async e=>{e.preventDefault();const result=el('adminBookResult');const data=Object.fromEntries(new FormData(ab));data.menu_id=Number(data.menu_id);try {const v=await api('adminBook',{},data);result.textContent='予約番号 '+v.booking_id+' を登録しました';await dashboard();}catch(err){result.textContent=err.message;}};}
   const sel=el('mediaMenu');
   if(sel)sel.innerHTML=cfg.menus.map(m=>'<option value="'+Number(m.id)+'">'+escapeHtml(m.name)+'</option>').join('');
   const kind=el('mediaKind');

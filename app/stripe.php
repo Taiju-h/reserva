@@ -7,21 +7,7 @@ function stripeEnabled(): bool {
         && str_starts_with(setting('STRIPE_WEBHOOK_SECRET'),'whsec_');
 }
 function stripeDb(): PDO {
-    $p=db();
-    $p->exec('CREATE TABLE IF NOT EXISTS stripe_payments (
-        booking_id INTEGER PRIMARY KEY REFERENCES bookings(id),
-        session_id TEXT UNIQUE,
-        amount_jpy INTEGER NOT NULL,
-        expires_at TEXT NOT NULL,
-        state TEXT NOT NULL DEFAULT "initiating",
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )');
-    $p->exec('CREATE TABLE IF NOT EXISTS stripe_events (
-        event_id TEXT PRIMARY KEY,
-        event_type TEXT NOT NULL,
-        processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )');
-    return $p;
+    return db();
 }
 function stripeApi(string $endpoint,array $params,string $idempotency): array {
     if(!function_exists('curl_init')) fail('サーバーにPHP cURL拡張が必要です',503);
@@ -51,7 +37,7 @@ function stripeRequestBooking(): never {
        || !dateValid($date)||mb_strlen($name)<1||mb_strlen($name)>100
        || !filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>254
        || strlen($phone)>40||mb_strlen($note)>1000) fail('予約内容を確認してください');
-    $db=stripeDb();$db->exec('BEGIN IMMEDIATE');
+    $db=stripeDb();bookingLock($db);$db->beginTransaction();
     try{
         if(!in_array($time,availability($menuId,$date),true)) {
             $db->rollBack();fail('希望日時は予約できません',409);
@@ -72,6 +58,7 @@ function stripeRequestBooking(): never {
             ->execute([$bookingId,(int)$menu['price'],$expiry]);
         $db->commit();
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+    finally {bookingUnlock($db);}
     try {
         $base='https://hanamaru.uzero.style';
         $s=stripeApi('checkout/sessions',[
@@ -119,9 +106,9 @@ function stripeWebhook(): never {
     if(!is_array($event)||empty($event['id'])||!is_string($event['id'])||!is_string($event['type']??null)) fail('イベント内容が不正です');
     if(($event['livemode']??true)!==false) fail('本番決済イベントは受け付けません');
     $type=$event['type'];$session=$event['data']['object']??[];
-    $db=stripeDb();$db->exec('BEGIN IMMEDIATE');
+    $db=stripeDb();bookingLock($db);$db->beginTransaction();
     try {
-        $q=$db->prepare('INSERT OR IGNORE INTO stripe_events(event_id,event_type) VALUES(?,?)');
+        $q=$db->prepare('INSERT IGNORE INTO stripe_events(event_id,event_type) VALUES(?,?)');
         $q->execute([$event['id'],$type]);
         if($q->rowCount()===0){$db->commit();jsonOut(['received'=>true]);}
         if(in_array($type,['checkout.session.completed','checkout.session.async_payment_succeeded','checkout.session.expired','checkout.session.async_payment_failed'],true) && is_array($session)) {
@@ -134,7 +121,7 @@ function stripeWebhook(): never {
                     && (int)($session['amount_total']??-1)===(int)$p['amount_jpy']
                     && (string)($session['client_reference_id']??'')===(string)$p['booking_id'];
                 if($paid){
-                    $q=$db->prepare('SELECT COUNT(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND b.starts_at<? AND b.ends_at>? AND (b.status="confirmed" OR (b.status="pending_payment" AND p.expires_at>?) )');
+                    $q=$db->prepare('SELECT COUNT(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND b.starts_at<? AND b.ends_at>? AND (b.status=\'confirmed\' OR (b.status=\'pending_payment\' AND p.expires_at>?) )');
                     $q->execute([$p['booking_id'],$p['ends_at'],$p['starts_at'],(new DateTimeImmutable())->format('Y-m-d H:i:s')]);
                     $conflict=(int)$q->fetchColumn()>0;
                     $expired=strtotime($p['expires_at'])<time();
@@ -153,6 +140,7 @@ function stripeWebhook(): never {
         }
         $db->commit();jsonOut(['received'=>true]);
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+    finally {bookingUnlock($db);}
 }
 function stripeStatus(): never {
     $session=(string)($_GET['session_id']??'');

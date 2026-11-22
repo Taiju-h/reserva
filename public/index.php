@@ -171,7 +171,7 @@ try {
     if($action==='setStatus' && $method==='POST'){
         requireAdmin();checkCsrf();$v=body();$status=(string)($v['status']??'');$id=(int)($v['id']??0);
         if(!in_array($status,['confirmed','cancelled'],true)||$id<1)fail('不正な更新です');
-        $pdo=db();$pdo->exec('BEGIN IMMEDIATE');
+        $pdo=db();bookingLock($pdo);$pdo->beginTransaction();
         try{
             $stmt=$pdo->prepare('SELECT * FROM bookings WHERE id=?');$stmt->execute([$id]);$b=$stmt->fetch();
             if(!$b){$pdo->rollBack();fail('予約がありません',404);}

@@ -127,3 +127,28 @@ header nav a{font-size:13px;color:#555}
 #publicView .career-story a{font-size:13px;font-weight:700;color:#278d7c}
 #publicView .career-story-photo{background-image:url("https://images.pexels.com/photos/8101611/pexels-photo-8101611.jpeg?auto=compress&cs=tinysrgb&w=900");background-size:cover;background-position:center}
 @media(max-width:650px){#publicView .career-story{grid-template-columns:1fr}#publicView .career-story-photo{min-height:170px;order:-1}#publicView .career-story-text{padding:23px}}
+
+
+/* Reference design correction: refuse unrelated stock people and prioritize the user's own hero image. */
+#publicView #siteHero {
+  background-image:linear-gradient(115deg,#ff983b 0%,#ff7b30 62%,#f46a37 100%)!important;
+  background-size:cover!important;
+  background-position:center!important;
+}
+#publicView .career-story-photo {
+  display:none!important;
+  background-image:none!important;
+}
+#publicView .career-story{grid-template-columns:1fr!important;min-height:0!important}
+#publicView .career-story-text{padding:26px 34px!important}
+@media(max-width:650px){#publicView #siteHero{background-image:linear-gradient(115deg,#ff983b,#f46a37)!important}}
+/* Admin-uploaded hero is applied via --hanacari-hero to avoid previous !important override. */
+#publicView #siteHero.has-hero-photo{
+  background-image:linear-gradient(90deg,rgba(236,108,29,.82),rgba(245,119,40,.12)),var(--hanacari-hero)!important;
+  color:#fff;
+}
+@media(max-width:650px){
+ #publicView #siteHero.has-hero-photo{
+  background-image:linear-gradient(90deg,rgba(236,108,29,.88),rgba(245,119,40,.38)),var(--hanacari-hero)!important;
+ }
+}

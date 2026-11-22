@@ -70,3 +70,33 @@ docker compose --env-file /dev/null logs --tail=60 hanamaru
 - Back up the MySQL database before code upgrades or schema migrations.
 - MySQL application account should only access its own database.
 - External MySQL requires appropriate firewall restrictions and credential management.
+
+## 2026-11-22: media, inquiry and waitlist extension
+
+On existing MySQL installations, after `git pull --ff-only` and **before** testing the new PHP code, apply:
+
+```bash
+cd /var/www/hanamaru
+docker compose --env-file /dev/null exec -T mysql sh -c \
+  'MYSQL_PWD="$DB_PASSWORD" exec mysql --default-character-set=utf8mb4 -u "$DB_USERNAME" "$DB_DATABASE"' \
+  < ops/migrate-20261122-media.sql
+```
+
+This creates `site_media`, `inquiries`, and `waitlist` without deleting bookings.
+Check with:
+
+```bash
+curl -fsS 'http://127.0.0.1:18081/?action=config'
+```
+
+The application now supports management of top image (one) and menu gallery photos
+(up to 20/menu), admin manual bookings, public inquiry/waitlist capture and
+admin list views. Photo files are written to `storage/media` and must be backed up
+**separately from the MySQL database**. Existing photos on RESERVA are not migrated
+automatically. Past booking/customer data also requires explicit authorized export
+from the RESERVA account, field mapping, deduplication and import.
+
+Do not claim feature parity with the RESERVA management service: staff scheduling,
+full e-mail notification delivery, subscriptions, coupon plans, payment refunds,
+actual auto-waitlist notification, external calendar synchronization and other
+RESERVA account-only functions are not implemented or tested.

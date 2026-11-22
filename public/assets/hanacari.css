@@ -70,3 +70,24 @@ header nav a{font-size:13px;color:#555}
 #publicView .hero:has(img){background-color:#fa762c}
 @media(max-width:950px){header{padding:14px 18px!important}header::after{left:0;width:100%}#publicView{margin:18px 18px 0!important}}
 @media(max-width:650px){header{min-height:78px;flex-wrap:wrap;gap:5px}header strong{font-size:24px!important}.header-subtitle{display:none}#publicView .hero{height:250px!important;padding:25px 16px!important}#publicView .hero h1{font-size:36px!important}.reserva-public-grid{grid-template-columns:1fr;gap:15px}#publicView .business-info{order:2;padding:16px!important;background:#fafafa!important}#publicView .reserva-menu-side{order:1}#publicView .menu{min-height:150px}#publicView .menu::after{right:16px}}
+
+
+/* 2026-11-22: visual hierarchy - one hero photograph only, no repeated stock shots. */
+#publicView .career-features{margin:22px 0 24px;padding:26px 30px;border-radius:14px;background:#fff6f0;display:grid;grid-template-columns:1fr 1.9fr;align-items:center;gap:24px}
+#publicView .feature-intro h2{font-size:20px;margin:0 0 11px;color:#2f3233}
+#publicView .feature-intro h2:after{content:"";display:block;width:38px;height:3px;background:#f77b34;margin-top:10px;border-radius:5px}
+#publicView .feature-intro p{font-size:13px;color:#5b6368;line-height:1.8;margin:0}
+#publicView .feature-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+#publicView .feature-item{text-align:center;padding:8px 4px;border-left:1px solid #f3d7c9}
+#publicView .feature-icon{font-size:30px;display:block;color:#eb792d;margin-bottom:8px}
+#publicView .feature-item strong{font-size:13px;display:block;color:#323739}
+#publicView .feature-item p{font-size:12px;line-height:1.5;color:#687177;margin:7px 0 0}
+#publicView .career-guidance{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:0 0 25px}
+#publicView .guidance-card{border:1px solid #e4e7e8;border-radius:12px;padding:24px 28px;background:#fff}
+#publicView .guidance-card h2{font-size:19px;color:#333;margin:0 0 16px}
+#publicView .guidance-card h2:before{content:"";display:inline-block;width:5px;height:18px;vertical-align:-3px;background:#f57c36;border-radius:3px;margin-right:10px}
+#publicView .guidance-card ol,#publicView .guidance-card ul{margin:0 0 12px;padding-left:24px;line-height:2;font-size:14px}
+#publicView .guidance-card li::marker{color:#e7813b;font-weight:700}
+#publicView .guidance-card p{font-size:12px;color:#737d82;line-height:1.7}
+#publicView .guidance-card a{display:inline-block;color:#158978;font-size:13px;font-weight:700;margin-top:8px}
+@media(max-width:700px){#publicView .career-features{grid-template-columns:1fr;padding:22px 18px;gap:12px}#publicView .feature-list{grid-template-columns:1fr 1fr 1fr}#publicView .feature-item{padding:8px 2px}#publicView .feature-item strong{font-size:11px}#publicView .career-guidance{grid-template-columns:1fr}#publicView .guidance-card{padding:20px}}

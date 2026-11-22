@@ -80,7 +80,7 @@ function availability(int $menuId,string $date): array {
     stripeDb();
     $rows=db()->prepare('SELECT b.starts_at, b.ends_at FROM bookings b
         LEFT JOIN stripe_payments sp ON sp.booking_id=b.id
-        WHERE (b.status=\'confirmed\' OR (b.status=\'pending_payment\' AND sp.expires_at > ?))
+        WHERE (b.status IN (\'confirmed\',\'pending_review\') OR (b.status=\'pending_payment\' AND sp.expires_at > ?))
         AND b.starts_at < ? AND b.ends_at > ?');
     $rows->execute([(new DateTimeImmutable())->format('Y-m-d H:i:s'),$end->format('Y-m-d H:i:s'),$start->format('Y-m-d H:i:s')]);
     $busy=$rows->fetchAll();$out=[];
@@ -126,10 +126,9 @@ try {
     if($action==='logout' && $method==='POST'){checkCsrf();$_SESSION=[];session_destroy();jsonOut(['ok'=>true]);}
     if($action==='book' && $method==='POST'){
         if(stripeEnabled()) fail('カード決済画面から予約を確定してください',409);
-        $paidMenu=db()->prepare('SELECT price FROM menus WHERE id=? AND active=1');
-        $paidMenu->execute([(int)(body()['menu_id']??0)]);
-        $price=$paidMenu->fetchColumn();
-        if($price===false || (int)$price>0) fail('有料メニューはカード決済の設定が必要です',503);
+        // When card checkout is disabled, paid services accept an application for manual review.
+        // This is NOT payment completion or a confirmed appointment.
+        if(time()-(int)($_SESSION['last_booking_request_at']??0)<60) fail('連続申込みは1分ほど空けてください',429);
         checkCsrf();$v=body();
         $id=(int)($v['menu_id']??0);$date=(string)($v['date']??'');$time=(string)($v['time']??'');
         $name=trim((string)($v['name']??''));$email=trim((string)($v['email']??''));$phone=trim((string)($v['phone']??''));$note=trim((string)($v['note']??''));
@@ -138,11 +137,15 @@ try {
         $pdo=db();bookingLock($pdo);$pdo->beginTransaction();
         try {
             if(!in_array($time,availability($id,$date),true)) { $pdo->rollBack();fail('この時間は満席です。別の時間を選択してください',409); }
-            $stmt=$pdo->prepare('SELECT duration FROM menus WHERE id=? AND active=1');$stmt->execute([$id]);$duration=(int)$stmt->fetchColumn();
+            $stmt=$pdo->prepare('SELECT duration,price FROM menus WHERE id=? AND active=1');$stmt->execute([$id]);$menu=$stmt->fetch();
+            if(!$menu) {$pdo->rollBack();fail('メニューがありません',404);}
+            $duration=(int)$menu['duration'];$isPaid=(int)$menu['price']>0;
             $begin=new DateTimeImmutable($date.' '.$time);
-            $insert=$pdo->prepare('INSERT INTO bookings(menu_id,starts_at,ends_at,customer_name,email,phone,note) VALUES(?,?,?,?,?,?,?)');
-            $insert->execute([$id,$begin->format('Y-m-d H:i:s'),$begin->modify('+'.$duration.' minutes')->format('Y-m-d H:i:s'),$name,$email,$phone,$note]);
-            $bookingId=(int)$pdo->lastInsertId();$pdo->commit();jsonOut(['ok'=>true,'booking_id'=>$bookingId]);
+            $insert=$pdo->prepare('INSERT INTO bookings(menu_id,starts_at,ends_at,customer_name,email,phone,note,status) VALUES(?,?,?,?,?,?,?,?)');
+            $insert->execute([$id,$begin->format('Y-m-d H:i:s'),$begin->modify('+'.$duration.' minutes')->format('Y-m-d H:i:s'),$name,$email,$phone,$note,$isPaid?'pending_review':'confirmed']);
+            $bookingId=(int)$pdo->lastInsertId();$pdo->commit();
+            $_SESSION['last_booking_request_at']=time();
+            jsonOut(['ok'=>true,'booking_id'=>$bookingId,'status'=>$isPaid?'pending_review':'confirmed','payment_received'=>false]);
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
         finally {bookingUnlock($pdo);}
     }
@@ -211,7 +214,7 @@ try {
                 $check=$pdo->prepare('SELECT state FROM stripe_payments WHERE booking_id=?');
                 $check->execute([$id]);$paymentState=$check->fetchColumn();
                 if($paymentState!==false && $paymentState!=='paid'){ $pdo->rollBack();fail('決済未完了のため確定できません',409); }
-                $stmt=$pdo->prepare('SELECT count(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND (b.status=\'confirmed\' OR (b.status=\'pending_payment\' AND p.expires_at>?)) AND b.starts_at<? AND b.ends_at>?');
+                $stmt=$pdo->prepare('SELECT count(*) FROM bookings b LEFT JOIN stripe_payments p ON p.booking_id=b.id WHERE b.id<>? AND (b.status IN (\'confirmed\',\'pending_review\') OR (b.status=\'pending_payment\' AND p.expires_at>?)) AND b.starts_at<? AND b.ends_at>?');
                 $stmt->execute([$id,(new DateTimeImmutable())->format('Y-m-d H:i:s'),$b['ends_at'],$b['starts_at']]);
                 if((int)$stmt->fetchColumn()>0){$pdo->rollBack();fail('別の予約と重複します',409);}
             }
@@ -288,7 +291,7 @@ function showMenus(){ $('menus').innerHTML=cfg.menus.map(m=>'<button type="butto
 async function loadTimes(){pickedTime='';$('bookBtn').disabled=true;selection();if(!pickedMenu || !$('date').value){$('times').textContent='メニューと日付を選んでください';return;}$('customerStep').classList.add('hidden'); $('times').textContent='読み込み中…';try{const date=$('date').value;const d=await api('availability',{menu_id:pickedMenu,date});if(date!==$('date').value)return;$('times').innerHTML=d.times.map(t=>'<button type="button" data-time="'+t+'">'+t+'</button>').join('')||'<p class="muted">この日は空き枠がありません。</p>';document.querySelectorAll('[data-time]').forEach(btn=>btn.onclick=()=>{$('customerStep').classList.remove('hidden');pickedTime=btn.dataset.time;document.querySelectorAll('[data-time]').forEach(x=>x.classList.toggle('chosen',x===btn));$('bookBtn').disabled=false;selection();});}catch(e){error('times',e);}}
 function selection(){let menu=cfg.menus?.find(m=>Number(m.id)===pickedMenu);$('selection').textContent=menu&&pickedTime?menu.name+' / '+$('date').value+' '+pickedTime+' / '+Number(menu.price).toLocaleString('ja-JP')+'円':'';}
 async function init(){try{cfg=await api('config');csrfToken=cfg.csrf;$('brand').textContent=cfg.settings.site_name;$('siteTitle').textContent=cfg.settings.site_name;let adminRoute=location.pathname.replace(/\/$/,'')==='/admin';$('publicView').classList.toggle('hidden',adminRoute);$('adminView').classList.toggle('hidden',!adminRoute);if(adminRoute){if(cfg.admin)await dashboard();return;}if(window.initSiteExtras)window.initSiteExtras();if(cfg.stripe_test_enabled){$('bookBtn').textContent='Stripeテスト決済に進む';}
-else { $('bookBtn').textContent='予約を確定する（有料メニューは決済準備中）'; }
+else { $('bookBtn').textContent='予約を申し込む（料金は未決済）'; }
 if(new URLSearchParams(location.search).has('payment')){
     let p=new URLSearchParams(location.search);
     const msg=document.createElement('div');msg.className='notice';msg.id='paymentNotice';
@@ -306,7 +309,7 @@ if(new URLSearchParams(location.search).has('payment')){
 $('date').min=today();$('date').value=today();showMenus();$('date').onchange=loadTimes;}catch(e){alert(e.message);}}
 $('bookingForm').onsubmit=async e=>{e.preventDefault();if(!pickedMenu||!pickedTime)return;let data=Object.fromEntries(new FormData(e.target));$('bookBtn').disabled=true;$('bookingError').innerHTML='';try{const result=await api(cfg.stripe_test_enabled?'createCheckout':'book',{}, {...data,menu_id:pickedMenu,date:$('date').value,time:pickedTime});
 if(result.checkout_url){window.location.assign(result.checkout_url);return;}
-$('bookingForm').innerHTML='<div class="notice"><h2>予約を受け付けました</h2><p>予約番号: '+result.booking_id+'</p><p>予約内容を控えてください。現在、自動メール送信は未設定です。</p></div>';loadTimes();}catch(err){error('bookingError',err);$('bookBtn').disabled=false;}};
+$('bookingForm').innerHTML='<div class="notice"><h2>'+(result.status==='pending_review'?'予約申込みを受け付けました（未確定）':'予約を受け付けました')+'</h2><p>受付番号: '+result.booking_id+'</p><p>'+(result.status==='pending_review'?'お支払いは完了していません。運営による確認後に予約確定となります。':'予約を受け付けました。')+'</p><p>現在、自動確認メールは送信されません。受付番号を控えて運営にご確認ください。</p></div>';loadTimes();}catch(err){error('bookingError',err);$('bookBtn').disabled=false;}};
 $('loginForm').onsubmit=async e=>{e.preventDefault();try{await api('login',{}, {password:$('password').value});$('password').value='';await dashboard();}catch(err){error('loginError',err);}};
 async function dashboard(){const d=await api('adminData');$('loginPanel').classList.add('hidden');$('dashboard').classList.remove('hidden');
 $('bookings').innerHTML=d.bookings.map(b=>'<tr><td>'+b.id+'</td><td>'+esc(b.starts_at)+'</td><td>'+esc(b.menu_name)+'</td><td>'+esc(b.customer_name)+'</td><td>'+esc(b.email)+'<br>'+esc(b.phone)+'</td><td>'+esc(b.status)+'</td><td><button class="secondary" data-book="'+b.id+'" data-status="'+(b.status==='confirmed'?'cancelled':'confirmed')+'">'+(b.status==='confirmed'?'取消':'復帰')+'</button></td></tr>').join('');

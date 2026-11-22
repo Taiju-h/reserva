@@ -27,3 +27,46 @@ header nav a:hover{color:#1c756d}
 .legal-links{display:flex;justify-content:center;flex-wrap:wrap;gap:16px;padding:16px 10px 32px}
 .legal-links a{font-size:12px;color:#657a82;text-decoration:underline}
 @media(max-width:650px){header{position:relative}header nav{gap:9px}header nav a{font-size:12px}#publicView .hero{padding:33px 20px}#publicView .hero h1{font-size:28px}.business-info{grid-template-columns:1fr}.business-info>div+div{border-left:0;border-top:1px solid var(--hana-line)}#publicView .panel{padding:17px}}
+
+
+/* RESERVA-like public booking layout based on owner-supplied visual reference.
+   Use uploaded original logo and top image for exact artwork match. */
+body{background:#fff!important;color:#454545}
+header{position:relative!important;min-height:100px;max-width:900px;margin:auto;box-shadow:none!important;padding:14px 0!important;display:flex;gap:14px;align-items:center;justify-content:space-between}
+header::after{content:"";position:absolute;bottom:0;left:calc((900px - 100vw)/2);width:100vw;border-bottom:1px solid #ededed}
+header strong{font-size:28px!important;letter-spacing:.015em!important;font-weight:900!important;color:#fb6047!important;white-space:nowrap}
+.flower-mark{color:#fb6047;font-size:31px;vertical-align:middle}
+.header-subtitle{font-size:12px;color:#404040;flex:1}
+header nav a{font-size:13px;color:#555}
+#publicView{max-width:900px!important;margin:18px auto 0!important;padding:0!important}
+#publicView .hero{height:342px;padding:85px 30px 35px!important;border:0!important;border-radius:12px 12px 0 0!important;margin-bottom:24px!important;background:linear-gradient(130deg,#fa8a28,#fb652a)!important;color:white;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#publicView .hero .eyebrow{color:#fff1e0;font-weight:600}
+#publicView .hero h1{color:white!important;font-size:48px!important;margin:0 0 16px!important;font-weight:900}
+#publicView .hero p:last-child{color:#fff!important;font-size:16px}
+.reserva-public-grid{display:grid;grid-template-columns:190px minmax(0,1fr);column-gap:32px;align-items:start}
+#publicView .business-info{display:block!important;border:0!important;background:none!important;margin:0!important}
+#publicView .business-info>div{padding:0!important;margin-bottom:16px}
+#publicView .business-info>div+div{border:0!important}
+#publicView .business-info strong{font-size:12px;color:#404040!important}
+#publicView .business-info p{font-size:12px!important;line-height:1.8;margin:5px 0}
+#publicView .business-info>div:last-child p{font-size:0!important}
+#publicView .business-info>div:last-child p::after{content:"月 07:00 ～ 22:00\A火 07:00 ～ 22:00\A水 07:00 ～ 22:00\A木 07:00 ～ 22:00\A金 07:00 ～ 22:00\A土 07:00 ～ 22:00\A日 07:00 ～ 22:00";white-space:pre;line-height:1.85;font-size:12px}
+#publicView .panel{border-radius:5px!important;margin:0 0 16px!important;padding:20px!important;border:1px solid #e7e7e7!important;box-shadow:none!important}
+#publicView #menuSection{border:0!important;padding:0!important}
+#publicView #menuSection h2{display:none}
+#publicView #menuSection>p.muted{display:none}
+#publicView #menus{grid-template-columns:1fr;gap:14px}
+#publicView .menu{display:flex;flex-direction:column;position:relative;min-height:150px;width:100%;text-align:left;padding:21px 20px!important;border:1px solid #e5e5e5!important;border-radius:5px!important;box-shadow:none!important;background:white!important}
+#publicView .menu b{font-size:15px!important;color:#333;margin:0 0 5px}
+#publicView .menu small{font-size:14px!important;color:#333!important;order:0;margin-top:4px}
+#publicView .menu::after{content:"予約する";position:absolute;right:40px;bottom:16px;min-width:110px;padding:11px 18px;border-radius:30px;background:#59b9a8;color:#fff;text-align:center;font-size:13px;font-weight:600}
+#publicView .menu:hover{border-color:#5abbac!important}
+#publicView .menu.selected{border-color:#5abbac!important}
+#publicView #reservationStep,#publicView #customerStep{margin:26px 0 18px!important}
+#publicView #reservationStep h2,#publicView #customerStep h2{color:#343434!important}
+#publicView .extras{margin-top:26px!important}
+#publicView .extras h2:not(:first-child){margin-top:20px}
+#publicView .legal-links{border-top:1px solid #eee;margin-top:22px}
+#publicView .hero:has(img){background-color:#fa762c}
+@media(max-width:950px){header{padding:14px 18px!important}header::after{left:0;width:100%}#publicView{margin:18px 18px 0!important}}
+@media(max-width:650px){header{min-height:78px;flex-wrap:wrap;gap:5px}header strong{font-size:24px!important}.header-subtitle{display:none}#publicView .hero{height:250px!important;padding:25px 16px!important}#publicView .hero h1{font-size:36px!important}.reserva-public-grid{grid-template-columns:1fr;gap:15px}#publicView .business-info{order:2;padding:16px!important;background:#fafafa!important}#publicView .reserva-menu-side{order:1}#publicView .menu{min-height:150px}#publicView .menu::after{right:16px}}

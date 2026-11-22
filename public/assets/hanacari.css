@@ -39,7 +39,7 @@ header strong{font-size:28px!important;letter-spacing:.015em!important;font-weig
 .header-subtitle{font-size:12px;color:#404040;flex:1}
 header nav a{font-size:13px;color:#555}
 #publicView{max-width:900px!important;margin:18px auto 0!important;padding:0!important}
-#publicView .hero{height:342px;padding:85px 30px 35px!important;border:0!important;border-radius:12px 12px 0 0!important;margin-bottom:24px!important;background:linear-gradient(130deg,#fa8a28,#fb652a)!important;color:white;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#publicView .hero{height:342px;padding:85px 30px 35px!important;border:0!important;border-radius:12px 12px 0 0!important;margin-bottom:24px!important;background:linear-gradient(130deg,#fa8a28,#fb652a);color:white;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
 #publicView .hero .eyebrow{color:#fff1e0;font-weight:600}
 #publicView .hero h1{color:white!important;font-size:48px!important;margin:0 0 16px!important;font-weight:900}
 #publicView .hero p:last-child{color:#fff!important;font-size:16px}

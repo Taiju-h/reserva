@@ -21,7 +21,7 @@ fi
 
 echo "Checking installed software..."
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y apache2 git curl php-cli php-sqlite3 php-mbstring libapache2-mod-php
+DEBIAN_FRONTEND=noninteractive apt-get install -y apache2 git curl php-cli php-sqlite3 php-mbstring php-curl libapache2-mod-php
 a2enmod rewrite
 if [[ ! -d "$REPO_DIR/.git" ]]; then
   git clone https://github.com/Taiju-h/reserva.git "$REPO_DIR"

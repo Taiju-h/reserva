@@ -27,32 +27,25 @@ TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 git archive "$TARGET" | tar -x -C "$TMP"
-find "$TMP/public" "$TMP/app" -type f -name '*.php' -print0 | xargs -0 -r -n1 php -l >/dev/null
-if ! command -v python3 >/dev/null; then echo "python3 required for SQLite backup" >&2; exit 1; fi
+find "$TMP/public" "$TMP/app" -type f -name '*.php' -print0 | xargs -0 -r -n1 php8.3 -l >/dev/null
+# The MySQL backup MUST finish before updating the application code.
+command -v docker >/dev/null || { echo "Docker is required" >&2; exit 1; }
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-BACKUP="$BACKUP_DIR/backup-$TIMESTAMP-$PREVIOUS.sqlite"
-DB="$APP_DIR/storage/reservations.sqlite"
-if [[ -e "$DB" ]]; then
-  python3 - "$DB" "$BACKUP" <<'PY'
-import sqlite3,sys
-source=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro", uri=True)
-dest=sqlite3.connect(sys.argv[2])
-with dest: source.backup(dest)
-result=dest.execute("PRAGMA integrity_check").fetchone()[0]
-source.close()
-dest.close()
-if result!="ok": raise SystemExit("SQLite backup integrity check failed")
-PY
-  chmod 600 "$BACKUP"
-  echo "Database snapshot: $BACKUP"
-fi
+BACKUP="$BACKUP_DIR/mysql-$TIMESTAMP-$PREVIOUS.sql"
+docker compose --env-file /dev/null exec -T mysql sh -ec \
+  'MYSQL_PWD="$DB_PASSWORD" exec mysqldump --single-transaction --quick --set-gtid-purged=OFF -u "$DB_USERNAME" "$DB_DATABASE"' > "$BACKUP"
+test -s "$BACKUP" || { echo "MySQL backup is empty" >&2; exit 1; }
+chmod 600 "$BACKUP"
+echo "MySQL snapshot: $BACKUP"
+
 rollback() {
   code="$?"
   trap - EXIT
   if [[ "$code" -ne 0 && "${SWITCHED:-0}" == 1 ]]; then
     echo "Deployment failed, restoring previous code revision: $PREVIOUS" >&2
     git reset --hard "$PREVIOUS" || true
-    echo "DB snapshot preserved at: $BACKUP" >&2
+    docker compose --env-file /dev/null up -d --build || true
+    echo "MySQL snapshot preserved at: $BACKUP" >&2
     echo "No automatic database restore: migrations require a coordinated procedure." >&2
   fi
   cleanup
@@ -61,11 +54,13 @@ rollback() {
 trap rollback EXIT
 git reset --hard "$TARGET"
 SWITCHED=1
-find public app -type f -name '*.php' -print0 | xargs -0 -r -n1 php -l >/dev/null
-# Host-specific loopback request. Apache config starts as Require local.
-HTTP_CODE="$(curl -sS --connect-timeout 3 --max-time 12 -o "$TMP/response.json" -w '%{http_code}' -H "Host: $DOMAIN" "http://127.0.0.1/?action=config")"
+find public app -type f -name '*.php' -print0 | xargs -0 -r -n1 php8.3 -l >/dev/null
+docker compose --env-file /dev/null config --quiet
+docker compose --env-file /dev/null up -d --build
+# Verify the app inside Docker, rather than host Apache (which has its own PHP runtime).
+HTTP_CODE="$(curl -sS --connect-timeout 3 --max-time 15 -o "$TMP/response.json" -w '%{http_code}' "http://127.0.0.1:18081/?action=config")"
 if [[ "$HTTP_CODE" != "200" ]]; then
-  echo "HTTP health check failed: $HTTP_CODE" >&2; exit 1
+  echo "Container HTTP health check failed: $HTTP_CODE" >&2; exit 1
 fi
 python3 - "$TMP/response.json" <<'PY'
 import json,sys
@@ -74,4 +69,4 @@ if not isinstance(data.get("menus"),list) or not isinstance(data.get("settings")
     raise SystemExit("Unexpected API health response")
 PY
 echo "DEPLOY SUCCESS: $PREVIOUS -> $TARGET"
-echo "SQLite backup: ${BACKUP:-none}"
+echo "MySQL backup: ${BACKUP:-none}"

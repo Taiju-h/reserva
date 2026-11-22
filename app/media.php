@@ -75,8 +75,10 @@ function inquiryCreate(): never {
     $email=trim((string)($v['email']??''));
     $message=trim((string)($v['message']??''));
     if(mb_strlen($name)<1 || mb_strlen($name)>100 || !filter_var($email,FILTER_VALIDATE_EMAIL) || strlen($email)>254 || mb_strlen($message)<5 || mb_strlen($message)>3000) fail('入力内容をご確認ください');
+    if(time()-(int)($_SESSION['last_inquiry_at']??0)<60) fail('続けて送信する場合は少し時間を空けてください',429);
     $q=db()->prepare('INSERT INTO inquiries(name,email,message) VALUES(?,?,?)');
     $q->execute([$name,$email,$message]);
+    $_SESSION['last_inquiry_at']=time();
     jsonOut(['ok'=>true]);
 }
 function waitlistCreate(): never {
@@ -89,8 +91,10 @@ function waitlistCreate(): never {
     if(!filter_var($email,FILTER_VALIDATE_EMAIL) || strlen($email)>254 || mb_strlen($name)>100 || ($date!==''&&!dateValid($date))) fail('入力内容をご確認ください');
     $q=db()->prepare('SELECT COUNT(*) FROM menus WHERE id=? AND active=1');$q->execute([$menu]);
     if(!$q->fetchColumn()) fail('メニューがありません');
+    if(time()-(int)($_SESSION['last_waitlist_at']??0)<60) fail('続けて登録する場合は少し時間を空けてください',429);
     $q=db()->prepare('INSERT INTO waitlist(menu_id,preferred_date,email,name) VALUES(?,?,?,?)');
     $q->execute([$menu,$date?:null,$email,$name]);
+    $_SESSION['last_waitlist_at']=time();
     jsonOut(['ok'=>true]);
 }
 function extraAdminData(): never {

@@ -176,7 +176,7 @@ header nav a{font-size:13px;color:#555}
 #adminView .admin-pane{margin:0}
 #adminView .admin-pane h2{font-size:20px}
 #adminView .admin-pane .scroll{overflow-x:auto}
-@media(max-width:850px){
+@media(max-width:699px){
   #adminView{padding:0 12px;margin:16px auto}
   #adminView .hana-admin-layout{grid-template-columns:1fr;gap:12px}
   #adminView .hana-admin-sidebar{position:static;display:flex;flex-direction:row;overflow-x:auto;white-space:nowrap;gap:6px;padding:10px}
@@ -208,4 +208,18 @@ header nav a{font-size:13px;color:#555}
  #reservationStep .time-filters{width:100%}
  #reservationStep .time-filter{flex:1;padding:10px 8px}
  #reservationStep .chosen-slot-summary:not([hidden]){align-items:flex-start;flex-direction:column;gap:4px}
+}
+
+/* Desktop/tablet in landscape: keep navigation at the left, not wrapping as top tabs. */
+@media(min-width:700px){
+ #adminView .hana-admin-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:20px}
+ #adminView .hana-admin-sidebar{position:sticky;top:92px;display:flex;flex-direction:column;flex-wrap:nowrap;overflow:visible;white-space:normal;align-self:start}
+ #adminView .hana-admin-sidebar-title{display:block}
+ #adminView .hana-admin-nav{display:block;width:100%;min-width:0;text-align:left;background:transparent;color:#364b54;border:0}
+ #adminView .hana-admin-nav.active{background:#e0f3ee;color:#126e68}
+ #adminView .hana-admin-content{min-width:0}
+}
+@media(max-width:699px){
+ #adminView .hana-admin-sidebar{flex-wrap:nowrap;scrollbar-width:thin}
+ #adminView .hana-admin-nav{white-space:nowrap}
 }

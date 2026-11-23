@@ -353,6 +353,7 @@ try {
 <div class="actions" style="justify-content:space-between;gap:12px;flex-wrap:wrap">
   <strong id="teacherDirectoryCount">登録済みの先生を確認中</strong>
   <button type="button" id="bulkImportTeachers" class="secondary">掲載の42名をまとめて登録</button>
+  <button type="button" id="migrateTeacherProfiles" class="secondary" hidden>プロフィール・資格をDBに移行</button>
 </div>
 <p id="teacherDirectoryResult" role="status"></p>
 <h3>先生を個別に追加</h3>
@@ -408,7 +409,7 @@ try {
 <footer>Hanamaru Reservation Platform</footer>
 <script src="/assets/operations.js?v=20261123-explain2" defer></script>
 <script src="/assets/scheduling-admin.js?v=20261123-schedule2" defer></script>
-<script src="/assets/teachers-admin.js?v=20261123-recovery1" defer></script>
+<script src="/assets/teachers-admin.js?v=20261123-migration2" defer></script>
 <script src="/assets/teacher-profiles-admin.js?v=20261123-profile3" defer></script>
 <script src="/assets/site-extras.js" defer></script>
 <script>

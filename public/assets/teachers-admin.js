@@ -29,9 +29,14 @@
    const tbody=get('teacherDirectoryRows');
    tbody.innerHTML=rows.map(t=>
       '<tr><td>'+Number(t.id)+'</td><td><strong>'+escape(t.name)+'</strong></td><td>'+(Number(t.active)?'有効':'停止中')+'</td><td>'+
+      '<button type="button" data-teacher-profile="'+Number(t.id)+'">プロフィール・写真・資格</button> '+
       (master?'<button type="button" class="secondary" data-teacher-edit="'+Number(t.id)+'">名前変更</button> ':'')+
       '<button type="button" class="secondary" data-teacher-toggle="'+Number(t.id)+'" data-teacher-active="'+(Number(t.active)?'0':'1')+'">'+(Number(t.active)?'停止':'再開')+'</button></td></tr>'
    ).join('')||'<tr><td colspan="4">該当する先生はいません。</td></tr>';
+   tbody.querySelectorAll('[data-teacher-profile]').forEach(btn=>btn.onclick=()=>{
+     if(window.openTeacherProfile)window.openTeacherProfile(Number(btn.dataset.teacherProfile));
+     else get('teacherDirectoryResult').textContent='プロフィール画面を読み込めません。ページを更新してください。';
+   });
    tbody.querySelectorAll('[data-teacher-toggle]').forEach(btn=>btn.onclick=async()=>{
      if(!confirm('先生の状態を変更しますか？'))return;
      try{await api('teacherStatus',{}, {id:Number(btn.dataset.teacherToggle),active:Number(btn.dataset.teacherActive)});await refresh();if(window.refreshSchedulingAdmin)await window.refreshSchedulingAdmin();}

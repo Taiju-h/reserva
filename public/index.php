@@ -399,7 +399,7 @@ try {
 <footer>Hanamaru Reservation Platform</footer>
 <script src="/assets/operations.js?v=20261123-explain2" defer></script>
 <script src="/assets/scheduling-admin.js?v=20261123-schedule2" defer></script>
-<script src="/assets/teachers-admin.js?v=20261123-teachers1" defer></script>
+<script src="/assets/teachers-admin.js?v=20261123-teachers2" defer></script>
 <script src="/assets/site-extras.js" defer></script>
 <script>
 'use strict';

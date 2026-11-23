@@ -522,10 +522,16 @@ $('bookingForm').onsubmit=async e=>{e.preventDefault();if(!pickedMenu||!pickedTi
 if(result.checkout_url){window.location.assign(result.checkout_url);return;}
 $('bookingForm').innerHTML='<div class="notice"><h2>予約が確定しました</h2><p>予約番号: '+result.booking_id+'</p><p>現在、自動確認メールは送信されません。予約番号と日時を控えてください。</p></div>';loadTimes();}catch(err){error('bookingError',err);$('bookBtn').disabled=false;}};
 $('loginForm').onsubmit=async e=>{e.preventDefault();try{await api('login',{}, {login_id:$('adminLoginId').value,password:$('password').value});$('password').value='';await dashboard();}catch(err){error('loginError',err);}};
-let currentAdminPage='bookings';
-function adminNavigate(page){
+const adminPageNames=['bookings','manual','calendar','teachers','qualifications','scheduling','menus','media','inquiries','settings','users'];
+function adminPageFromUrl(){
+    const page=new URLSearchParams(location.search).get('page');
+    return adminPageNames.includes(page)?page:'bookings';
+}
+let currentAdminPage=adminPageFromUrl();
+function adminNavigate(page,updateUrl=false){
     const sections=document.querySelectorAll('#dashboard [data-admin-section]');
-    if(!Array.from(sections).some(el=>el.dataset.adminSection===page))page='bookings';
+    if(!adminPageNames.includes(page)||!Array.from(sections).some(el=>el.dataset.adminSection===page))page='bookings';
+    if(page==='users' && $('adminUsersNav').hidden)page='bookings';
     currentAdminPage=page;
     sections.forEach(el=>{el.hidden=el.dataset.adminSection!==page;});
     document.querySelectorAll('#dashboard [data-admin-page]').forEach(el=>{
@@ -533,22 +539,30 @@ function adminNavigate(page){
         el.classList.toggle('active',selected);
         el.setAttribute('aria-current',selected?'page':'false');
     });
+    if(updateUrl){
+        const url=new URL(location.href);
+        url.searchParams.set('page',page);
+        history.pushState({adminPage:page},'',url.pathname+url.search+url.hash);
+    }
 }
-document.querySelectorAll('#dashboard [data-admin-page]').forEach(el=>el.addEventListener('click',()=>{
-    const page=el.dataset.adminPage;
-    adminNavigate(page);
-    if(page==='users')refreshAdminUsers().catch(e=>alert(e.message));
-    if(page==='teachers' && window.refreshTeacherDirectory)window.refreshTeacherDirectory().catch(e=>error('teacherDirectoryResult',e));
-    if(page==='qualifications' && window.refreshTeacherQualifications)window.refreshTeacherQualifications().catch(e=>{const x=$('qualificationMasterArea');if(x)x.textContent='資格マスターを取得できません：'+e.message;});
-    if(page==='scheduling' && window.refreshSchedulingAdmin)window.refreshSchedulingAdmin().catch(e=>alert(e.message));
-}));
+function loadAdminPage(page,updateUrl=false){
+    adminNavigate(page,updateUrl);
+    if(currentAdminPage==='users')refreshAdminUsers().catch(e=>alert(e.message));
+    if(currentAdminPage==='teachers' && window.refreshTeacherDirectory)window.refreshTeacherDirectory().catch(e=>error('teacherDirectoryResult',e));
+    if(currentAdminPage==='qualifications' && window.refreshTeacherQualifications)window.refreshTeacherQualifications().catch(e=>{const x=$('qualificationMasterArea');if(x)x.textContent='資格マスターを取得できません：'+e.message;});
+    if(currentAdminPage==='scheduling' && window.refreshSchedulingAdmin)window.refreshSchedulingAdmin().catch(e=>alert(e.message));
+}
+document.querySelectorAll('#dashboard [data-admin-page]').forEach(el=>el.addEventListener('click',()=>loadAdminPage(el.dataset.adminPage,true)));
+window.addEventListener('popstate',()=>{
+    if(location.pathname.replace(/\\/$/,'')==='/admin' && !$('dashboard').classList.contains('hidden'))loadAdminPage(adminPageFromUrl());
+});
 async function dashboard(){const d=await api('adminData');$('loginPanel').classList.add('hidden');$('dashboard').classList.remove('hidden');$('adminUsersNav').hidden=!d.master;const faviconSettings=$('faviconSettings');if(faviconSettings)faviconSettings.hidden=!d.master;$('adminUsersPane').dataset.master=d.master?'yes':'no';
 $('bookings').innerHTML=d.bookings.map(b=>'<tr><td>'+b.id+'</td><td>'+esc(b.starts_at)+'</td><td>'+esc(b.menu_name)+'</td><td>'+esc(b.customer_name)+'</td><td>'+esc(b.email)+'<br>'+esc(b.phone)+'</td><td>'+esc(b.status==='pending_review'?'申込み・確認待ち':b.status)+'</td><td><button class="secondary" data-book="'+b.id+'" data-status="'+(b.status==='confirmed'?'cancelled':'confirmed')+'">'+(b.status==='confirmed'?'取消':b.status==='pending_review'?'申込みを確定':'復帰')+'</button></td></tr>').join('');
 document.querySelectorAll('[data-book]').forEach(b=>b.onclick=async()=>{if(!confirm(b.dataset.status==='confirmed'?'予約を確定しますか？ 料金は当日現地払いです。':'この予約を取り消しますか？'))return;try{await api('setStatus',{}, {id:Number(b.dataset.book),status:b.dataset.status});await dashboard();}catch(e){alert(e.message);}});
 $('menuEditor').innerHTML=d.menus.map(m=>'<div class="actions" style="padding:9px;border-bottom:1px solid #eee"><b>'+esc(m.name)+'</b><span>'+m.duration+'分 / '+Number(m.price).toLocaleString()+'円 / '+(m.active?'公開':'非公開')+'</span><button class="secondary" data-edit="'+m.id+'">編集</button></div>').join('');
 document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{let m=d.menus.find(x=>Number(x.id)===Number(b.dataset.edit));for(let key of ['id','name','description','duration','price'])$('menuForm').elements[key].value=m[key];$('menuForm').elements.active.checked=!!Number(m.active);$('menuForm').scrollIntoView({behavior:'smooth'});});
 for(let key of ['site_name','open_time','close_time','slot_minutes','closed_weekdays','closed_dates','lead_minutes','max_advance_days'])$('settingsForm').elements[key].value=d.settings[key]??'';
-adminNavigate(currentAdminPage);
+adminNavigate(adminPageFromUrl());
 // Optional sections load independently; a missing profile table cannot hide the teacher list.
 if(currentAdminPage==='teachers' && window.refreshTeacherDirectory)await window.refreshTeacherDirectory();
 if(currentAdminPage==='qualifications' && window.refreshTeacherQualifications)await window.refreshTeacherQualifications().catch(e=>{const x=$('qualificationMasterArea');if(x)x.textContent='資格マスターを取得できません：'+e.message;});

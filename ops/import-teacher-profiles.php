@@ -335,6 +335,10 @@ foreach($names as $name){
   if(!$photoUrl && isset($knownPhotoUrls[$name]))$photoUrl=$knownPhotoUrls[$name];
   if(!$photoUrl)$photoUrl=archivePhoto($xp,$name,$source);
   $photo=$photoUrl?savePhoto($photoUrl,$id,$root):null;
+  if(!$photo) {
+    $reason=$photoUrl?'画像URLを特定したがダウンロード・画像形式・保存に失敗':'プロフィール・一覧に本人写真の画像URLを特定できない';
+    fwrite(STDERR,'写真未取得 '.$name.' : '.$reason.' / '.$detailUrl."\n");
+  }
   $save->execute([$id,$summary,$fields['career'],$fields['qualifications_text'],$fields['training'],$fields['activity_area'],$fields['message'],$photo,$photo?$photoUrl:null,$detailUrl?:$source]);
   $stats['profiles']++;
   if($photo)$stats['photos']++;
@@ -347,4 +351,5 @@ foreach($names as $name){
   echo $name.': '.($detail?'詳細あり':'一覧のみ').' / '.($photo?'写真あり':'写真なし').' / 資格'.count(qualifications($fields['qualifications_text']))."件\n";
 }
 echo "\nRESULT ".json_encode($stats,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\n";
+if($stats['photos']===0)fwrite(STDERR,"WARNING: 写真0件。写真URL検出または外部サイトへの接続・public/uploadsの書き込み権限をご確認ください。\n");
 if($stats['missing_details'])echo "Some instructors have no discoverable detail-page link; source data for those is kept blank.\n";

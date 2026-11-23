@@ -137,6 +137,28 @@ function findMemberLinks(DOMXPath $xp,array $names,string $base): array {
   }
   return $found;
 }
+function archivePhoto(DOMXPath $xp,string $name,string $url): ?string {
+  $normalize=static fn(string $v):string=>preg_replace('/[\\s\\x{3000}]+/u','',trim($v));
+  foreach($xp->query('//h2|//h3|//h4') as $heading){
+    if($normalize(textOf($heading))!==$normalize($name))continue;
+    $node=$heading;
+    for($level=0;$level<3 && $node;$level++,$node=$node->parentNode){
+      // Never use a container with multiple instructors: an image there is ambiguous.
+      $namesHere=0;
+      foreach($xp->query('.//h2|.//h3|.//h4',$node) as $h){
+        if(preg_match('/^[\\p{Han}\\p{Hiragana}\\p{Katakana}A-Za-z\\s]{2,40}$/u',textOf($h)))$namesHere++;
+      }
+      if($namesHere>1)break;
+      foreach($xp->query('.//img',$node) as $img){
+        if(!$img instanceof DOMElement)continue;
+        $raw=$img->getAttribute('data-src')?:$img->getAttribute('data-lazy-src')?:$img->getAttribute('src');
+        $link=originUrl($raw,$url);
+        if($link&&!preg_match('~logo|icon|banner|placeholder|youtube~i',$link))return $link;
+      }
+    }
+  }
+  return null;
+}
 function qualifications(string $raw): array {
   if($raw==='')return [];
   // Preserve exact documented labels; only split where the source presents distinct lines.
@@ -207,6 +229,7 @@ foreach($names as $name){
     break;
   }
   $photoUrl=$detail?photoFrom(parseHtml($detail),$detailUrl):null;
+  if(!$photoUrl)$photoUrl=archivePhoto($xp,$name,$source);
   $photo=$photoUrl?savePhoto($photoUrl,$id,$root):null;
   $save->execute([$id,$summary,$fields['career'],$fields['qualifications_text'],$fields['training'],$fields['activity_area'],$fields['message'],$photo,$photo?$photoUrl:null,$detailUrl?:$source]);
   $stats['profiles']++;

@@ -246,8 +246,8 @@ $save=$pdo->prepare('INSERT INTO teacher_profiles
  training=IF(training IS NULL OR training="",VALUES(training),training),
  activity_area=IF(activity_area IS NULL OR activity_area="",VALUES(activity_area),activity_area),
  message=IF(message IS NULL OR message="",VALUES(message),message),
- photo_path=COALESCE(VALUES(photo_path),photo_path),
- photo_source_url=COALESCE(VALUES(photo_source_url),photo_source_url),
+ photo_source_url=IF(photo_path IS NULL OR photo_path="",VALUES(photo_source_url),photo_source_url),
+ photo_path=COALESCE(NULLIF(photo_path,""),VALUES(photo_path)),
  source_url=COALESCE(VALUES(source_url),source_url),
  source_checked_at=NOW()');
 $addQualification=$pdo->prepare('INSERT INTO qualification_master(name,category) VALUES(?,?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)');

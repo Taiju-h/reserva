@@ -11,7 +11,7 @@
      teachers=result.teachers||[];
      master=Boolean(result.master);
      const count=get('teacherDirectoryCount');
-     if(count)count.textContent='登録済み '+teachers.length+'名 / 参考名簿 '+result.reference_count+'名';
+     if(count)count.textContent='先生 '+teachers.length+'名 / プロフィール '+Number(result.statistics?.profiles||0)+'名 / 経歴 '+Number(result.statistics?.careers||0)+'名 / 写真 '+Number(result.statistics?.photos||0)+'名 / 資格紐付け '+Number(result.statistics?.qualifications||0)+'件';
      renderRows();
      const button=get('bulkImportTeachers');
      button.hidden=!master;
@@ -28,7 +28,7 @@
    const rows=teachers.filter(t=>t.name.replace(/\s+/g,'').toLowerCase().includes(query));
    const tbody=get('teacherDirectoryRows');
    tbody.innerHTML=rows.map(t=>
-      '<tr><td>'+Number(t.id)+'</td><td><strong>'+escape(t.name)+'</strong></td><td>'+(Number(t.active)?'有効':'停止中')+'</td><td>'+
+      '<tr><td>'+Number(t.id)+'</td><td><strong>'+escape(t.name)+'</strong><div style="font-size:12px;color:#687686">'+(Number(t.has_photo)?'写真あり':'写真なし')+'・'+(Number(t.has_career)?'経歴あり':'経歴なし')+'・資格'+Number(t.qualification_count||0)+'件</div></td><td>'+(Number(t.active)?'有効':'停止中')+'</td><td>'+
       '<button type="button" data-teacher-profile="'+Number(t.id)+'">プロフィール・写真・資格</button> '+
       (master?'<button type="button" class="secondary" data-teacher-edit="'+Number(t.id)+'">名前変更</button> ':'')+
       '<button type="button" class="secondary" data-teacher-toggle="'+Number(t.id)+'" data-teacher-active="'+(Number(t.active)?'0':'1')+'">'+(Number(t.active)?'停止':'再開')+'</button></td></tr>'

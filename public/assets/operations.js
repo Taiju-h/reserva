@@ -29,6 +29,16 @@
       <p class="muted">選択月の予約を表示します。顧客情報は管理者のみ閲覧できます。</p>
       <div id="calendarMessage" role="status"></div>
       <div id="monthGrid" class="scroll"></div>
+      <section class="hana-calendar-explain" id="calendarExplain" aria-live="polite">
+        <h3>この日の受付可否と理由</h3>
+        <p class="muted">カレンダーの日付を押すと、選択したメニューについて受付できる理由・禁止条件・空き時間を表示します。</p>
+        <div class="row">
+          <div><label for="explainDate">確認する日</label><input type="date" id="explainDate"></div>
+          <div><label for="explainMenu">確認するメニュー</label><select id="explainMenu"></select></div>
+        </div>
+        <button type="button" id="explainCheck">受付条件を確認</button>
+        <div id="explainResult" role="status"></div>
+      </section>
       <hr style="margin:28px 0;border:0;border-top:1px solid #e5e9ef">
       <h3>顧客一覧</h3>
       <div class="actions">
@@ -37,6 +47,10 @@
       </div>
       <div id="customerResults" class="scroll" style="margin-top:15px"></div>
     `;
+    document.getElementById('explainCheck').onclick = loadExplanation;
+    document.getElementById('explainMenu').onchange = loadExplanation;
+    document.getElementById('explainDate').onchange = loadExplanation;
+    loadExplanationMenus();
     document.getElementById('calendarLoad').onclick = loadCalendar;
     document.getElementById('calendarMonth').onchange = loadCalendar;
     document.getElementById('customerFind').onclick = loadCustomers;
@@ -71,14 +85,46 @@
       for(let d=1;d<=days;d++){
         const key=month+'-'+String(d).padStart(2,'0');
         const bs=groups.get(key)||[];
-        html+='<div style="min-height:82px;border:1px solid #e5e9ef;padding:7px;border-radius:6px"><b>'+d+'</b>';
+        html+='<div style="min-height:82px;border:1px solid #e5e9ef;padding:7px;border-radius:6px"><button type="button" class="hana-cal-day" data-inspect-day="'+key+'" title="受付可否と理由を確認">'+d+'日 <span>詳細</span></button>';
         for(const b of bs) html+='<div style="font-size:12px;padding:4px;margin-top:3px;border-radius:4px;background:'+
           (b.status==='confirmed'?'#e6f5f0':'#f1f1f1')+';color:#35434c">'+esc(b.starts_at.slice(11,16))+
           ' '+esc(b.customer_name)+'<br><small>'+esc(b.menu_name)+(b.status==='confirmed'?'':'（取消）')+'</small></div>';
         html+='</div>';
       }
       el.innerHTML=html+'</div>';
+      el.querySelectorAll('[data-inspect-day]').forEach(btn=>btn.onclick=()=>{document.getElementById('explainDate').value=btn.dataset.inspectDay;loadExplanation();document.getElementById('calendarExplain').scrollIntoView({behavior:'smooth',block:'nearest'});});
     } catch(e) { el.innerHTML='<p class="error">'+esc(e.message)+'</p>'; }
+  }
+
+  async function loadExplanationMenus(){
+    try{
+      const data=await get('schedulingData');
+      const select=document.getElementById('explainMenu');
+      select.innerHTML=data.menus.map(x=>'<option value="'+Number(x.id)+'">'+esc(x.name)+'</option>').join('');
+      const date=document.getElementById('explainDate');
+      if(!date.value)date.value=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+      if(select.value)loadExplanation();
+    }catch(e){document.getElementById('explainResult').innerHTML='<p class="error">'+esc(e.message)+'</p>';}
+  }
+  async function loadExplanation(){
+    const date=document.getElementById('explainDate').value;
+    const menu=document.getElementById('explainMenu').value;
+    if(!date||!menu)return;
+    const el=document.getElementById('explainResult');
+    el.textContent='条件を確認中…';
+    try{
+      const data=await get('scheduleExplain',{date,menu_id:menu});
+      const scopes={store:'店舗全体',teacher:'先生',menu:'メニュー',bookings:'予約状況'};
+      let html='<h4>'+esc(data.date)+' / '+esc(data.menu)+'</h4>';
+      html+='<p>担当：'+esc(data.teacher||'指定なし')+'　営業時間：'+esc(data.store_hours)+'</p>';
+      html+='<p class="'+(data.times.length?'hana-explain-open':'hana-explain-closed')+'"><strong>'+(data.times.length?'受付可能な時間あり（'+data.times.length+'枠）':'現在、予約可能な時間はありません')+'</strong></p>';
+      html+='<h4>判定理由</h4><ul>'+
+        data.reasons.map(x=>'<li><strong>'+esc(scopes[x.scope]||x.scope)+'：</strong>'+esc(x.text)+'</li>').join('')+
+        data.rules.map(x=>'<li><strong>'+esc(scopes[x.scope]||x.scope)+' / '+(x.decision==='deny'?'受付禁止':'受付許可')+'：</strong>'+esc(x.label)+'（'+esc(x.start_time)+'〜'+esc(x.end_time)+'）</li>').join('')+
+        '</ul>';
+      if(data.times.length)html+='<p><strong>予約可能な開始時間</strong></p><p>'+data.times.map(esc).join('、')+'</p>';
+      el.innerHTML=html;
+    }catch(e){el.innerHTML='<p class="error">'+esc(e.message)+'</p>';}
   }
   async function loadCustomers(){
     const el=document.getElementById('customerResults');

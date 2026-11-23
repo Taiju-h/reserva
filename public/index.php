@@ -408,7 +408,7 @@ try {
 <footer>Hanamaru Reservation Platform</footer>
 <script src="/assets/operations.js?v=20261123-explain2" defer></script>
 <script src="/assets/scheduling-admin.js?v=20261123-schedule2" defer></script>
-<script src="/assets/teachers-admin.js?v=20261123-profile3" defer></script>
+<script src="/assets/teachers-admin.js?v=20261123-recovery1" defer></script>
 <script src="/assets/teacher-profiles-admin.js?v=20261123-profile3" defer></script>
 <script src="/assets/site-extras.js" defer></script>
 <script>

@@ -14,9 +14,10 @@ function activeAdminSession(): bool {
     if(isMasterAdmin()) return true;
     $id=(int)($_SESSION['admin_user_id']??0);
     if($id<1) return false;
-    $q=db()->prepare('SELECT active FROM admin_users WHERE id=?');
+    $q=db()->prepare('SELECT active,session_version FROM admin_users WHERE id=?');
     $q->execute([$id]);
-    return (int)$q->fetchColumn()===1;
+    $row=$q->fetch(PDO::FETCH_ASSOC);
+    return $row && (int)$row['active']===1 && (int)$row['session_version']===(int)($_SESSION['admin_session_version']??-1);
 }
 function adminUsersRoute(string $action,string $method): void {
     if($action==='adminUsers' && $method==='GET'){

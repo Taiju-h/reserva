@@ -296,3 +296,11 @@ header nav a{font-size:13px;color:#555}
 #adminView .hana-directory-photo-empty{display:flex;align-items:center;justify-content:center;flex:none;width:52px;height:58px;border:1px solid #dbe6e2;border-radius:7px;background:#edf2f0;color:#899894;font-size:10px}
 #adminView #teacherDirectoryRows td:last-child{min-width:285px}
 #adminView #teacherDirectoryRows td:last-child button{font-size:12px;padding:8px 10px;margin:2px}
+
+
+/* Per-instructor migration verification */
+#adminView #teacherSyncProgress{margin:12px 0 18px;line-height:1.7}
+#adminView .hana-sync-results{max-height:340px;overflow:auto;margin-top:10px;background:#f7faf9;border:1px solid #dce8e3;border-radius:10px;padding:10px 14px}
+#adminView .hana-sync-results>div{padding:7px 0;border-bottom:1px solid #e6eeeb;overflow-wrap:anywhere}
+#adminView .hana-sync-results>div:last-child{border-bottom:0}
+#adminView #syncTeacherDetails,#adminView #syncMissingTeacherDetails{white-space:normal}

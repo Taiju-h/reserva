@@ -4,7 +4,7 @@
  const escape=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let teachers=[],master=false;
  async function refresh(){
-   const holder=get('teacherDirectoryAdmin');
+   const holder=get('teacherDirectoryRows');
    if(!holder)return;
    try{
      const result=await api('teacherDirectory');
@@ -15,7 +15,13 @@
      renderRows();
      const button=get('bulkImportTeachers');
      button.hidden=!master;
-   }catch(err){get('teacherDirectoryResult').textContent=err.message||String(err);}
+   }catch(err){
+     const message=err.message||String(err);
+     get('teacherDirectoryResult').textContent='先生一覧を取得できません：'+message;
+     holder.innerHTML='<tr><td colspan="4">一覧の読み込みに失敗しました。上のエラーをご確認ください。</td></tr>';
+     const count=get('teacherDirectoryCount');
+     if(count)count.textContent='先生一覧の取得に失敗しました';
+   }
  }
  function renderRows(){
    const query=(get('teacherDirectorySearch')?.value||'').replace(/\s+/g,'').toLowerCase();

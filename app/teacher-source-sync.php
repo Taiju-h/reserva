@@ -39,6 +39,7 @@ function syncMemberUrl(string $url,string $base): ?string {
     if(str_starts_with($url,'//'))$url='https:'.$url;
     elseif(str_starts_with($url,'/'))$url='https://hanamaru-souken.com'.$url;
     elseif(!preg_match('~^https?://~i',$url))$url=rtrim(dirname($base),'/').'/'.$url;
+    if(preg_match('~^http://(?:www\\.)?hanamaru-souken\\.com/~i',$url))$url='https://'.substr($url,7);
     return parse_url($url,PHP_URL_SCHEME)==='https' &&
       in_array(parse_url($url,PHP_URL_HOST),['hanamaru-souken.com','www.hanamaru-souken.com'],true)?$url:null;
 }

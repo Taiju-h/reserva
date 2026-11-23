@@ -82,7 +82,7 @@ function stripeRequestBooking(): never {
         $base='https://hanamaru.uzero.style';
         $s=stripeApi('checkout/sessions',[
             'mode'=>'payment',
-            'payment_method_types'=>['card'],
+            // Stripe Checkout chooses enabled payment methods from the Dashboard.
             'line_items'=>[[
                 'price_data'=>['currency'=>'jpy','unit_amount'=>(int)$menu['price'],
                     'product_data'=>['name'=>$menu['name']]],

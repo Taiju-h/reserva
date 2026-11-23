@@ -170,6 +170,15 @@ function qualifications(string $raw): array {
   }
   return array_keys($result);
 }
+function qualificationCategory(string $label): string {
+  if(preg_match('/キャリアコンサル|ＣＤＡ|CDA|GCDF|ディベロップメントアドバイザー|ディベロップメント・アドバイザー/iu',$label))return 'キャリア・就職支援';
+  if(preg_match('/カウンセラ|心理|メンタルヘルス/iu',$label))return '心理・相談';
+  if(preg_match('/ファイナンシャル|ファイナンス|FP技能士|ＡＦＰ|AFP/iu',$label))return '金融・生活設計';
+  if(preg_match('/フード|食品衛生|料理|チーズ|ホームパーティー/iu',$label))return '食・生活';
+  if(preg_match('/ビジネスマナー|秘書検定|マナープロトコール|インストラクター|講師/iu',$label))return '研修・マナー';
+  if(preg_match('/MBA|修士|博士/iu',$label))return '学位';
+  return '未分類';
+}
 function savePhoto(?string $url,int $id,string $root): ?string {
   if(!$url)return null;
   $data=fetchOrigin($url);
@@ -237,7 +246,7 @@ $save=$pdo->prepare('INSERT INTO teacher_profiles
  photo_source_url=COALESCE(VALUES(photo_source_url),photo_source_url),
  source_url=COALESCE(VALUES(source_url),source_url),
  source_checked_at=NOW()');
-$addQualification=$pdo->prepare('INSERT INTO qualification_master(name,category) VALUES(?,"未分類") ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)');
+$addQualification=$pdo->prepare('INSERT INTO qualification_master(name,category) VALUES(?,?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)');
 $linkQualification=$pdo->prepare('INSERT IGNORE INTO teacher_qualifications(teacher_id,qualification_id) VALUES(?,?)');
 $stats=['teachers'=>0,'detail_pages'=>0,'profiles'=>0,'photos'=>0,'qualification_links'=>0,'missing_details'=>[]];
 foreach($names as $name){
@@ -266,7 +275,7 @@ foreach($names as $name){
   $stats['profiles']++;
   if($photo)$stats['photos']++;
   foreach(qualifications($fields['qualifications_text']) as $qualification){
-    $addQualification->execute([$qualification]);
+    $addQualification->execute([$qualification,qualificationCategory($qualification)]);
     $qid=(int)$pdo->lastInsertId();
     $linkQualification->execute([$id,$qid]);
     $stats['qualification_links']++;

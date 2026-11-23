@@ -18,7 +18,11 @@ function teacherDirectoryRoute(string $action,string $method): void {
         requireAdmin();
         ensureTeacherDirectoryTable();
         $rows=db()->query('SELECT t.id,t.name,t.active,t.created_at,p.photo_path,
-           CASE WHEN p.teacher_id IS NULL THEN 0 ELSE 1 END AS profile_registered,
+           CASE WHEN p.teacher_id IS NULL
+             OR (COALESCE(p.summary,'')='' AND COALESCE(p.career,'')='' AND
+                 COALESCE(p.training,'')='' AND COALESCE(p.message,'')='' AND
+                 COALESCE(p.qualifications_text,'')='' AND COALESCE(p.photo_path,'')='')
+             THEN 0 ELSE 1 END AS profile_registered,
            CASE WHEN p.photo_path IS NULL OR p.photo_path="" THEN 0 ELSE 1 END AS has_photo,
            CASE WHEN p.career IS NULL OR p.career="" THEN 0 ELSE 1 END AS has_career,
            (SELECT COUNT(*) FROM teacher_qualifications tq WHERE tq.teacher_id=t.id) AS qualification_count

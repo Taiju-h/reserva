@@ -323,6 +323,36 @@ function syncMemberOne(int $index): array {
       'qualifications'=>$qualCount,'url'=>$sourceUrl];
 }
 function syncMemberRoute(string $action,string $method): void {
+    if($action==='teacherSourceStatus' && $method==='GET'){
+        requireMasterAdmin();
+        syncMemberTable();
+        $names=require __DIR__.'/teacher-directory.php';
+        $rows=db()->query('SELECT t.id,t.name,
+          COALESCE(p.career,"") AS career,
+          COALESCE(p.photo_path,"") AS photo_path,
+          (SELECT COUNT(*) FROM teacher_photo_assets a WHERE a.teacher_id=t.id) AS asset_count,
+          (SELECT COUNT(*) FROM teacher_qualifications q WHERE q.teacher_id=t.id) AS qualifications
+          FROM teachers t LEFT JOIN teacher_profiles p ON p.teacher_id=t.id')->fetchAll(PDO::FETCH_ASSOC);
+        $byName=[];
+        foreach($rows as $row)$byName[syncMemberKey($row['name'])]=$row;
+        $result=[];$photos=0;$careers=0;$links=0;$missing=0;
+        foreach($names as $i=>$name){
+            $r=$byName[syncMemberKey($name)]??null;
+            $hasPhoto=$r && ($r['photo_path']!==''||(int)$r['asset_count']>0);
+            $hasCareer=$r && $r['career']!=='';
+            $qualifications=$r?(int)$r['qualifications']:0;
+            $needs=!$r||!$hasPhoto||!$hasCareer||$qualifications===0;
+            $photos+=(int)(bool)$hasPhoto;
+            $careers+=(int)(bool)$hasCareer;
+            $links+=$qualifications;
+            $missing+=(int)$needs;
+            $result[]=['name'=>$name,'source_index'=>$i,'missing'=>$needs,
+              'has_photo'=>(bool)$hasPhoto,'has_career'=>(bool)$hasCareer,
+              'qualification_count'=>$qualifications];
+        }
+        jsonOut(['teachers'=>$result,'photos'=>$photos,'careers'=>$careers,
+          'qualification_links'=>$links,'missing_count'=>$missing]);
+    }
     if($action==='teacherPhoto' && $method==='GET'){
         requireAdmin();
         $id=(int)($_GET['id']??0);

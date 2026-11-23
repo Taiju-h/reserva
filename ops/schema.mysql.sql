@@ -125,3 +125,29 @@ CREATE TABLE IF NOT EXISTS schedule_rules (
  INDEX idx_schedule_rules_scope(scope,target_id,enabled),
  INDEX idx_schedule_rules_dates(start_date,end_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Instructor profiles / qualification master (new installations).
+CREATE TABLE IF NOT EXISTS teacher_profiles (
+ teacher_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+ summary TEXT NULL, career MEDIUMTEXT NULL,
+ qualifications_text MEDIUMTEXT NULL,
+ training MEDIUMTEXT NULL, activity_area TEXT NULL, message MEDIUMTEXT NULL,
+ photo_path VARCHAR(255) NULL, photo_source_url TEXT NULL,
+ source_url TEXT NULL, source_checked_at DATETIME NULL,
+ updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ CONSTRAINT fk_teacher_profiles_teacher FOREIGN KEY(teacher_id) REFERENCES teachers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS qualification_master (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ name VARCHAR(250) NOT NULL,
+ category VARCHAR(80) NOT NULL DEFAULT '未分類',
+ UNIQUE KEY uq_qualification_name(name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS teacher_qualifications (
+ teacher_id BIGINT UNSIGNED NOT NULL,
+ qualification_id BIGINT UNSIGNED NOT NULL,
+ note VARCHAR(255) NOT NULL DEFAULT '',
+ PRIMARY KEY(teacher_id,qualification_id),
+ CONSTRAINT fk_tq_teacher FOREIGN KEY(teacher_id) REFERENCES teachers(id) ON DELETE CASCADE,
+ CONSTRAINT fk_tq_qualification FOREIGN KEY(qualification_id) REFERENCES qualification_master(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

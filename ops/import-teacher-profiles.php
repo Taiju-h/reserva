@@ -97,17 +97,42 @@ function sections(DOMXPath $xp): array {
   return $out;
 }
 function photoFrom(DOMXPath $xp,string $url): ?string {
-  // Avoid logos / nav icons; prefer member content images.
-  foreach($xp->query('//main//img|//article//img|//*[contains(@class,"entry-content")]//img') as $img){
+  // The WordPress theme sometimes places the headshot outside main/article.
+  // Only accept actual source-domain uploaded image URLs, never placeholders.
+  $candidates=[];
+  foreach($xp->query('//img') as $img){
     if(!$img instanceof DOMElement)continue;
-    $raw=$img->getAttribute('data-src')?:$img->getAttribute('src');
-    $link=originUrl($raw,$url);
-    if(!$link)continue;
-    $lower=strtolower($link);
-    if(preg_match('~logo|icon|banner|noimage|placeholder|youtube|avatar-default~',$lower))continue;
-    return $link;
+    $raws=[];
+    foreach(['data-src','data-lazy-src','data-original','src'] as $attr){
+      $v=$img->getAttribute($attr);
+      if($v!=='')$raws[]=$v;
+    }
+    foreach(['data-srcset','srcset'] as $attr){
+      $value=$img->getAttribute($attr);
+      if($value!==''){
+        foreach(explode(',',$value) as $part){
+          $values=preg_split('/\\s+/',trim($part));
+          if(!empty($values[0]))$raws[]=$values[0];
+        }
+      }
+    }
+    foreach($raws as $raw){
+      $link=originUrl($raw,$url);
+      if(!$link)continue;
+      if(preg_match('~logo|icon|banner|noimage|placeholder|youtube|avatar-default|sprite|favicon~i',$link))continue;
+      if(!preg_match('~\\.(?:jpe?g|png|webp)(?:\\?|$)~i',$link))continue;
+      $score=0;
+      if(str_contains($link,'/uploads/'))$score+=10;
+      $alt=$img->getAttribute('alt');
+      if($alt!==''&&!preg_match('/ロゴ|logo|アイコン|icon/i',$alt))$score+=3;
+      if((int)$img->getAttribute('width')>=120)$score+=4;
+      if((int)$img->getAttribute('height')>=120)$score+=4;
+      if(preg_match('~member|profile|teacher|lecturer|portrait~i',$img->getAttribute('class').' '.$link))$score+=3;
+      $candidates[$link]=max($score,$candidates[$link]??0);
+    }
   }
-  return null;
+  arsort($candidates);
+  return array_key_first($candidates);
 }
 function findMemberLinks(DOMXPath $xp,array $names,string $base): array {
   $found=[];

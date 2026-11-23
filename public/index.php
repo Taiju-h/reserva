@@ -107,7 +107,7 @@ try {
     if($action==='stripeWebhook' && $method==='POST') stripeWebhook();
     if($action==='createCheckout' && $method==='POST') stripeRequestBooking();
     if($action==='paymentStatus' && $method==='GET') stripeStatus();
-    if($action==='config' && $method==='GET') jsonOut(['settings'=>prefs(),'menus'=>menus(),'admin'=>admin(),'csrf'=>csrf(),'stripe_test_enabled'=>stripeEnabled(),'payment_method'=>'card','media'=>mediaList()]);
+    if($action==='config' && $method==='GET') jsonOut(['settings'=>prefs(),'menus'=>menus(),'admin'=>admin(),'csrf'=>csrf(),'stripe_test_enabled'=>stripeEnabled(),'stripe_mode'=>stripeEnabled()?stripeMode():'disabled','payment_method'=>'card','media'=>mediaList()]);
     if($action==='availability' && $method==='GET') jsonOut(['times'=>availability((int)($_GET['menu_id']??0),(string)($_GET['date']??''))]);
     if($action==='login' && $method==='POST'){
         checkCsrf();$data=body();$hash=setting('ADMIN_PASSWORD_HASH');
@@ -289,7 +289,7 @@ function today(){let parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo
 function showMenus(){ $('menus').innerHTML=cfg.menus.map(m=>'<button type="button" class="menu '+(pickedMenu===Number(m.id)?'selected':'')+'" data-id="'+m.id+'">'+(cfg.media||[]).filter(x=>Number(x.menu_id)===Number(m.id)).slice(0,1).map(x=>'<img style="width:100%;max-height:180px;object-fit:cover;border-radius:8px;margin-bottom:10px" src="/?action=media&id='+Number(x.id)+'" alt="">').join('')+'<b>'+esc(m.name)+'</b>'+esc(m.description)+'<small>'+Number(m.duration)+'分 ・ '+Number(m.price).toLocaleString('ja-JP')+'円</small></button>').join('')||'予約メニューがありません';document.querySelectorAll('.menu').forEach(el=>el.onclick=()=>{pickedMenu=Number(el.dataset.id);pickedTime='';$('reservationStep').classList.remove('hidden');showMenus();loadTimes();$('reservationStep').scrollIntoView({behavior:'smooth',block:'start'});});}
 async function loadTimes(){pickedTime='';$('bookBtn').disabled=true;selection();if(!pickedMenu || !$('date').value){$('times').textContent='メニューと日付を選んでください';return;}$('customerStep').classList.add('hidden'); $('times').textContent='読み込み中…';try{const date=$('date').value;const d=await api('availability',{menu_id:pickedMenu,date});if(date!==$('date').value)return;$('times').innerHTML=d.times.map(t=>'<button type="button" data-time="'+t+'">'+t+'</button>').join('')||'<p class="muted">この日は空き枠がありません。</p>';document.querySelectorAll('[data-time]').forEach(btn=>btn.onclick=()=>{$('customerStep').classList.remove('hidden');pickedTime=btn.dataset.time;document.querySelectorAll('[data-time]').forEach(x=>x.classList.toggle('chosen',x===btn));$('bookBtn').disabled=false;selection();});}catch(e){error('times',e);}}
 function selection(){let menu=cfg.menus?.find(m=>Number(m.id)===pickedMenu);$('selection').textContent=menu&&pickedTime?menu.name+' / '+$('date').value+' '+pickedTime+' / '+Number(menu.price).toLocaleString('ja-JP')+'円':'';}
-async function init(){try{cfg=await api('config');csrfToken=cfg.csrf;$('brand').textContent=cfg.settings.site_name;$('siteTitle').textContent=cfg.settings.site_name;let adminRoute=location.pathname.replace(/\/$/,'')==='/admin';$('publicView').classList.toggle('hidden',adminRoute);$('adminView').classList.toggle('hidden',!adminRoute);if(adminRoute){if(cfg.admin)await dashboard();return;}if(window.initSiteExtras)window.initSiteExtras();if(cfg.stripe_test_enabled){$('bookBtn').textContent='Stripeテスト決済に進む';}
+async function init(){try{cfg=await api('config');csrfToken=cfg.csrf;$('brand').textContent=cfg.settings.site_name;$('siteTitle').textContent=cfg.settings.site_name;let adminRoute=location.pathname.replace(/\/$/,'')==='/admin';$('publicView').classList.toggle('hidden',adminRoute);$('adminView').classList.toggle('hidden',!adminRoute);if(adminRoute){if(cfg.admin)await dashboard();return;}if(window.initSiteExtras)window.initSiteExtras();if(cfg.stripe_test_enabled){$('bookBtn').textContent=cfg.stripe_mode==='live'?'カードで支払って予約する':'Stripeテスト決済に進む';}
 else { $('bookBtn').textContent='予約・オンライン決済は準備中'; }
 if(new URLSearchParams(location.search).has('payment')){
     let p=new URLSearchParams(location.search);
@@ -299,7 +299,7 @@ if(new URLSearchParams(location.search).has('payment')){
       const session=p.get('session_id');
       const check=async()=>{try{
         const data=await api('paymentStatus',{session_id:session});
-        msg.textContent=data.status==='confirmed'?'テスト決済を確認しました。予約が確定しました。':data.payment_state==='needs_refund'?'決済を受け付けましたが予約確定できませんでした。運営へ連絡してください。':'決済結果を確認中です。しばらくして画面を更新してください。';
+        msg.textContent=data.status==='confirmed'?'カード決済を確認しました。予約が確定しました。':data.payment_state==='needs_refund'?'決済を受け付けましたが予約確定できませんでした。運営へ連絡してください。':'決済結果を確認中です。しばらくして画面を更新してください。';
       }catch(e){msg.textContent='決済結果を取得できません。運営へお問い合わせください。';}};
       check();
     }else{msg.textContent='決済が中断されました。予約は確定していません。';}

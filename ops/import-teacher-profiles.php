@@ -26,11 +26,15 @@ function fetchOrigin(string $url): ?string {
   $host=parse_url($url,PHP_URL_HOST);
   if(!in_array($host,['hanamaru-souken.com','www.hanamaru-souken.com'],true)||parse_url($url,PHP_URL_SCHEME)!=='https')return null;
   $curl=curl_init($url);
-  curl_setopt_array($curl,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_TIMEOUT=>20,
+  curl_setopt_array($curl,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,CURLOPT_MAXREDIRS=>3,
+    CURLOPT_REDIR_PROTOCOLS=>CURLPROTO_HTTPS,CURLOPT_TIMEOUT=>20,
     CURLOPT_CONNECTTIMEOUT=>7,CURLOPT_USERAGENT=>'Hanamaru teacher profile migration (+https://hanamaru.uzero.style/)',
     CURLOPT_HTTPHEADER=>['Accept: text/html,image/*']]);
-  $body=curl_exec($curl);$status=curl_getinfo($curl,CURLINFO_HTTP_CODE);curl_close($curl);
-  return $status===200&&is_string($body)&&strlen($body)<8000000?$body:null;
+  $body=curl_exec($curl);$status=curl_getinfo($curl,CURLINFO_HTTP_CODE);
+  $effective=curl_getinfo($curl,CURLINFO_EFFECTIVE_URL);curl_close($curl);
+  $effectiveHost=parse_url((string)$effective,PHP_URL_HOST);
+  return $status===200 && in_array($effectiveHost,['hanamaru-souken.com','www.hanamaru-souken.com'],true)
+    && is_string($body)&&strlen($body)<8000000?$body:null;
 }
 function originUrl(string $url,string $base): ?string {
   $url=trim(html_entity_decode($url,ENT_QUOTES|ENT_HTML5,'UTF-8'));

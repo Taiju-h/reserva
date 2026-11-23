@@ -259,3 +259,33 @@ header nav a{font-size:13px;color:#555}
 #adminView .hana-cal-day{width:100%;text-align:left;background:#edf7f4;color:#16675e;border:1px solid #b8d7d0;padding:5px 7px;border-radius:5px;font-weight:800}
 #adminView .hana-cal-day span{font-size:10px;font-weight:500;float:right}
 @media(max-width:699px){#adminView .hana-schedule-menu{grid-template-columns:1fr;gap:5px}#adminView .hana-inline-form{flex-direction:column;align-items:stretch}}
+
+
+/* Teacher profiles and reusable qualifications */
+#adminView .hana-teacher-details,
+#adminView .hana-qualification-master{margin-top:30px;border-top:1px solid #e1e9ec;padding-top:24px;scroll-margin-top:95px}
+#adminView .hana-profile-header{display:flex;align-items:center;gap:20px;padding:16px;background:#f5faf8;border-radius:12px;margin-bottom:18px}
+#adminView .hana-profile-header h3{font-size:22px;margin:0 0 8px}
+#adminView .hana-teacher-photo{display:block;max-width:150px;width:150px;max-height:185px;object-fit:cover;border-radius:10px;border:1px solid #d6e2de;background:white}
+#adminView .hana-teacher-photo-placeholder{display:flex;align-items:center;justify-content:center;width:150px;height:150px;background:#e5ebe9;border:1px solid #cbd7d2;color:#687a72;border-radius:10px}
+#adminView #teacherProfileForm label{margin-top:17px}
+#adminView #teacherProfileForm textarea{line-height:1.65;resize:vertical;min-height:100px}
+#adminView #teacherProfileForm textarea[name="career"]{min-height:200px}
+#adminView .hana-teacher-qualification{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #e4e9e7;padding:9px 0}
+#adminView .hana-qualification-link{display:flex;gap:8px;margin-top:15px;align-items:center}
+#adminView .hana-qualification-link select{flex:1;min-width:0}
+#adminView .hana-qualification-link button{white-space:nowrap}
+#adminView .hana-qual-form{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto auto;gap:10px;align-items:end;margin-bottom:22px}
+#adminView .hana-qual-form label{margin:0}
+#adminView .hana-qual-form input{margin-top:6px}
+#adminView .hana-qual-form button{padding:11px}
+#adminView #qualificationMasterRows{margin-top:12px}
+@media(max-width:800px){
+ #adminView .hana-qual-form{grid-template-columns:1fr 1fr}
+}
+@media(max-width:580px){
+ #adminView .hana-qual-form{grid-template-columns:1fr}
+ #adminView .hana-profile-header{align-items:flex-start;flex-direction:column}
+ #adminView .hana-qualification-link{flex-direction:column}
+ #adminView .hana-qualification-link button,#adminView .hana-qualification-link select{width:100%}
+}

@@ -295,7 +295,7 @@ try {
 }catch(Throwable $e){error_log('[reserva] '.$e->getMessage());fail('処理に失敗しました。管理者にお問い合わせください',500);}
 ?><!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>はなキャリ | ハナマルキャリアお仕事相談予約受付</title><link rel="stylesheet" href="/assets/hanacari.css?v=20261123-profiles1"><style>
+<title>はなキャリ | ハナマルキャリアお仕事相談予約受付</title><link rel="stylesheet" href="/assets/hanacari.css?v=20261123-profiles2"><style>
 :root{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#26323e;background:#f6f7f9}*{box-sizing:border-box}body{margin:0}header{background:#fff;border-bottom:1px solid #e5e9ef;padding:19px max(20px,calc((100vw - 1040px)/2));display:flex;align-items:center;justify-content:space-between}header strong{font-size:22px;color:#1e6663}a{color:#1f7771;text-decoration:none}main{max-width:1040px;margin:32px auto;padding:0 16px}.hero{background:linear-gradient(120deg,#f3faf7,#e9f2f8);padding:34px;border-radius:14px;margin-bottom:25px}.hero h1{margin:0 0 8px;font-size:26px}section.panel{background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:24px;margin-bottom:18px;box-shadow:0 2px 12px #22334408}h2{font-size:19px;margin:0 0 18px}label{display:block;font-size:14px;font-weight:600;margin:13px 0 6px}input,select,textarea,button{font:inherit}input,select,textarea{width:100%;border:1px solid #ced6de;border-radius:8px;padding:11px;background:#fff}textarea{min-height:88px}button{border:0;border-radius:8px;padding:12px 18px;background:#257b76;color:white;font-weight:700;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}button.secondary{color:#335;background:#ecf0f2}button.danger{background:#ae5050}.menus{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.menu{border:1px solid #d7e0e3;background:#fff;padding:18px;text-align:left;border-radius:10px;cursor:pointer}.menu.selected{border:2px solid #257b76;background:#f0f9f7}.menu b{display:block;margin-bottom:6px}.menu small{display:block;margin-top:8px;color:#64717d}.times{display:grid;grid-template-columns:repeat(auto-fill,minmax(83px,1fr));gap:8px}.times button{background:#fff;color:#257b76;border:1px solid #91b9b6;padding:10px}.times button.chosen{background:#257b76;color:white}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.muted{color:#687686}.hidden{display:none!important}.notice{background:#eff8f3;padding:16px;border-radius:8px;margin:16px 0}.error{background:#fff0ee;color:#a43626;padding:12px;border-radius:8px;margin:12px 0}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:10px 7px;text-align:left;border-bottom:1px solid #e8edf1}th{background:#f7f9fa}.scroll{overflow:auto}.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}nav{display:flex;gap:15px}footer{text-align:center;color:#71808b;padding:35px}@media(max-width:620px){.row{grid-template-columns:1fr}.hero{padding:22px}section.panel{padding:17px}header{padding:16px}.hero h1{font-size:22px}}
 </style></head><body>
 <header><strong id="brand">はなキャリ <span class="flower-mark">✿</span></strong><span class="header-subtitle">はなキャリ - ハナマルキャリアお仕事相談予約受付</span><nav><a href="/">予約</a><a href="#contact">お問い合わせ</a><a href="/admin">ログイン</a></nav></header>
@@ -330,6 +330,7 @@ try {
 <button type="button" class="hana-admin-nav" data-admin-page="manual">手動予約登録</button>
 <button type="button" class="hana-admin-nav" data-admin-page="calendar">予約カレンダー・顧客</button>
 <button type="button" class="hana-admin-nav" data-admin-page="teachers">先生一覧・登録</button>
+<button type="button" class="hana-admin-nav" data-admin-page="qualifications">資格マスター</button>
 <button type="button" class="hana-admin-nav" data-admin-page="scheduling">受付条件・先生の予定</button>
 <button type="button" class="hana-admin-nav" data-admin-page="menus">予約メニュー設定</button>
 <button type="button" class="hana-admin-nav" data-admin-page="media">写真・画像</button>
@@ -367,6 +368,10 @@ try {
   <tbody id="teacherDirectoryRows"><tr><td colspan="4">読み込み中…</td></tr></tbody></table>
 </div>
 <section class="hana-teacher-details" id="teacherProfileArea" aria-live="polite"><p class="muted">先生の「プロフィール」ボタンを押すと写真・経歴・資格を確認できます。</p></section>
+</section>
+<section class="panel admin-pane" data-admin-section="qualifications">
+<h2>資格マスター・先生との紐付け</h2>
+<p class="muted">資格の名称・分類を登録・編集できます。先生への資格の登録は「先生一覧・登録」→「プロフィール・写真・資格」から行ってください。</p>
 <section id="qualificationMasterArea" class="hana-qualification-master"><p>資格マスターを読み込んでいます…</p></section>
 </section>
 <section class="panel admin-pane" data-admin-section="scheduling">
@@ -403,8 +408,8 @@ try {
 <footer>Hanamaru Reservation Platform</footer>
 <script src="/assets/operations.js?v=20261123-explain2" defer></script>
 <script src="/assets/scheduling-admin.js?v=20261123-schedule2" defer></script>
-<script src="/assets/teachers-admin.js?v=20261123-profile1" defer></script>
-<script src="/assets/teacher-profiles-admin.js?v=20261123-profile1" defer></script>
+<script src="/assets/teachers-admin.js?v=20261123-profile2" defer></script>
+<script src="/assets/teacher-profiles-admin.js?v=20261123-profile2" defer></script>
 <script src="/assets/site-extras.js" defer></script>
 <script>
 'use strict';

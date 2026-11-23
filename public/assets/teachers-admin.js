@@ -18,6 +18,8 @@
      renderRows();
      const button=get('bulkImportTeachers');
      button.hidden=!master;
+     const migrate=get('migrateTeacherProfiles');
+     if(migrate)migrate.hidden=!master;
    }catch(err){
      const message=err.message||String(err);
      get('teacherDirectoryResult').textContent='先生一覧を取得できません：'+message;
@@ -65,6 +67,21 @@
      try{await api('teacherSave',{}, {name});form.reset();get('teacherDirectoryResult').textContent='先生を登録しました。';await refresh();}
      catch(err){get('teacherDirectoryResult').textContent=err.message;}
      finally{button.disabled=false;}
+   };
+   const migrate=get('migrateTeacherProfiles');
+   if(migrate)migrate.onclick=async()=>{
+     if(!confirm('先生のプロフィール概要と資格マスターをDBに移行します。既存の経歴や写真は上書きしません。よろしいですか？'))return;
+     migrate.disabled=true;
+     const status=get('teacherDirectoryResult');
+     status.textContent='プロフィールと資格のDB移行を実行中…';
+     try{
+       const result=await api('migrateTeacherProfiles',{},{});
+       const m=result.migration||{};
+       status.textContent='移行完了：先生 '+m.teachers+'名／紹介文 '+m.summaries+'名／資格マスター '+m.qualification_master_count+'件／資格紐付け '+m.qualification_links_in_db+'件／写真 '+m.photos_in_db+'名。詳細経歴・写真は別途取得が必要です。';
+       await refresh();
+       if(window.refreshTeacherQualifications)await window.refreshTeacherQualifications();
+     }catch(err){status.textContent='DB移行に失敗しました：'+(err.message||String(err));}
+     finally{migrate.disabled=false;}
    };
    get('teacherDirectorySearch').oninput=renderRows;
    get('bulkImportTeachers').onclick=async()=>{

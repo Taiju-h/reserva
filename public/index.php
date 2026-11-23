@@ -282,7 +282,7 @@ try {
  <div class="career-story-text"><span class="story-kicker">CAREER &amp; WORK</span><h2>これからの働き方を、<br>一緒に考える。</h2><p>起業への第一歩、今の仕事の悩み、これからのキャリア。考えを整理するところからご相談いただけます。</p><a href="#menuSection">相談メニューへ戻る →</a></div>
  <div class="career-story-photo" role="img" aria-label="仕事について話し合う人々のイメージ写真"></div>
 </section>
-<section class="panel hidden" id="reservationStep"><h2>ご予約日時</h2><label for="date">希望日</label><input id="date" type="date"><p class="muted">ご予約可能な時間</p><div class="times" id="times">先にメニューと日付を選択してください。</div></section>
+<section class="panel hidden" id="reservationStep"><h2>ご予約日時</h2><div class="reservation-date-row"><div><label for="date">希望日</label><input id="date" type="date"></div><div class="reservation-date-display" aria-live="polite"><span>選択中の日程</span><strong id="selectedDateDisplay">日付を選択してください</strong></div></div><div class="reservation-time-heading"><p class="muted">ご予約可能な時間</p><div class="time-filters" id="timeFilters" aria-label="時間帯を選択"><button type="button" class="time-filter active" data-period="morning">午前</button><button type="button" class="time-filter" data-period="afternoon">午後</button><button type="button" class="time-filter" data-period="evening">夜間</button></div></div><div class="times" id="times">先にメニューと日付を選択してください。</div><div class="chosen-slot-summary" id="chosenSlotSummary" aria-live="polite" hidden><span>ご予約日時</span><strong id="chosenSlotDisplay"></strong></div></section>
 <section class="panel hidden" id="customerStep"><h2>お客様情報</h2><form id="bookingForm"><div class="row"><div><label>お名前 *</label><input name="name" maxlength="100" required autocomplete="name"></div><div><label>メールアドレス *</label><input name="email" type="email" maxlength="254" required autocomplete="email"></div></div><label>電話番号</label><input name="phone" maxlength="40" autocomplete="tel"><label>備考</label><textarea name="note" maxlength="1000"></textarea><p id="selection" class="muted"></p><div id="bookingError"></div><button id="bookBtn" disabled>予約を確定する</button></form></section><section class="panel extras"><h2>キャンセル待ち登録</h2><p class="muted">満席時に希望日時を登録できます。空きが出た場合の自動通知は準備中です。</p>
 <form id="waitlistForm"><label>メニュー</label><select name="menu_id" required id="waitlistMenu"></select><label>希望日（任意）</label><input name="date" type="date"><label>お名前（任意）</label><input name="name" maxlength="100"><label>メールアドレス</label><input name="email" type="email" maxlength="254" required><button type="submit">キャンセル待ち登録</button><p id="waitlistResult"></p></form><h2>利用可能な月額プラン</h2><p class="muted">現在利用可能なものはありません。</p><h2>利用可能な回数券</h2><p class="muted">現在利用可能なものはありません。</p></section><section class="panel" id="contact"><h2>お問い合わせ</h2><form id="inquiryForm"><label>お名前</label><input name="name" maxlength="100" required><label>メールアドレス</label><input name="email" type="email" maxlength="254" required><label>お問い合わせ内容</label><textarea name="message" minlength="5" maxlength="3000" required></textarea><button type="submit">お問い合わせを送信</button><p id="inquiryResult"></p></form></section><div class="legal-links"><a href="https://reserva.be/hanamarusoudan/terms" target="_blank" rel="noopener noreferrer">現行サービスの利用規約</a><a href="https://reserva.be/hanamarusoudan/privacy" target="_blank" rel="noopener noreferrer">現行サービスのプライバシーポリシー</a><a href="https://reserva.be/hanamarusoudan/tokushohou" target="_blank" rel="noopener noreferrer">現行サービスの特商法表示</a></div></main>
 <main id="adminView" class="hidden"><div class="hero"><h1>予約管理</h1><p>予約・メニュー・営業時間を管理します。</p></div>
@@ -335,8 +335,68 @@ async function api(action,params={},post){const q=new URLSearchParams({action,..
 function error(id,e){$(id).innerHTML='<div class="error">'+esc(e.message||e)+'</div>';}
 function today(){let parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());return parts;}
 function showMenus(){ $('menus').innerHTML=cfg.menus.map(m=>'<button type="button" class="menu '+(pickedMenu===Number(m.id)?'selected':'')+'" data-id="'+m.id+'">'+(cfg.media||[]).filter(x=>Number(x.menu_id)===Number(m.id)).slice(0,1).map(x=>'<img style="width:100%;max-height:180px;object-fit:cover;border-radius:8px;margin-bottom:10px" src="/?action=media&id='+Number(x.id)+'" alt="">').join('')+'<b>'+esc(m.name)+'</b>'+esc(m.description)+'<small>'+Number(m.duration)+'分 ・ '+Number(m.price).toLocaleString('ja-JP')+'円</small></button>').join('')||'予約メニューがありません';document.querySelectorAll('.menu').forEach(el=>el.onclick=()=>{pickedMenu=Number(el.dataset.id);pickedTime='';$('reservationStep').classList.remove('hidden');showMenus();loadTimes();$('reservationStep').scrollIntoView({behavior:'smooth',block:'start'});});}
-async function loadTimes(){pickedTime='';$('bookBtn').disabled=true;selection();if(!pickedMenu || !$('date').value){$('times').textContent='メニューと日付を選んでください';return;}$('customerStep').classList.add('hidden'); $('times').textContent='読み込み中…';try{const date=$('date').value;const d=await api('availability',{menu_id:pickedMenu,date});if(date!==$('date').value)return;$('times').innerHTML=d.times.map(t=>'<button type="button" data-time="'+t+'">'+t+'</button>').join('')||'<p class="muted">この日は空き枠がありません。</p>';document.querySelectorAll('[data-time]').forEach(btn=>btn.onclick=()=>{$('customerStep').classList.remove('hidden');pickedTime=btn.dataset.time;document.querySelectorAll('[data-time]').forEach(x=>x.classList.toggle('chosen',x===btn));const menu=cfg.menus.find(m=>Number(m.id)===pickedMenu);const blocked=Number(menu?.price||0)>0&&!cfg.stripe_test_enabled;$('bookBtn').disabled=blocked;$('bookBtn').textContent=blocked?'カード決済の設定待ち':Number(menu?.price||0)>0?(cfg.stripe_mode==='live'?'カードで支払って予約する':'Stripeテスト決済に進む'):'無料予約を確定する';$('bookingError').innerHTML=blocked?'<div class="error">現在オンライン決済を設定中のため、申込みを受け付けていません。</div>':'';selection();});}catch(e){error('times',e);}}
-function selection(){let menu=cfg.menus?.find(m=>Number(m.id)===pickedMenu);$('selection').textContent=menu&&pickedTime?menu.name+' / '+$('date').value+' '+pickedTime+' / '+Number(menu.price).toLocaleString('ja-JP')+'円':'';}
+let availableTimes=[];
+let currentTimePeriod='morning';
+function displayJapaneseDate(value){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return '日付を選択してください';
+    const d=new Date(value+'T12:00:00');
+    if(Number.isNaN(d.getTime()))return '日付を選択してください';
+    return d.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+}
+function timePeriod(time){const hour=Number(time.slice(0,2));return hour<12?'morning':hour<17?'afternoon':'evening';}
+function updateReservationSummary(){
+    const date=$('date').value;
+    $('selectedDateDisplay').textContent=displayJapaneseDate(date);
+    const hasSelection=Boolean(date&&pickedTime);
+    $('chosenSlotSummary').hidden=!hasSelection;
+    $('chosenSlotDisplay').textContent=hasSelection?displayJapaneseDate(date)+'　'+pickedTime:'';
+}
+function showTimePeriod(period){
+    currentTimePeriod=period;
+    document.querySelectorAll('#timeFilters [data-period]').forEach(el=>{
+        const active=el.dataset.period===period;
+        el.classList.toggle('active',active);
+        el.setAttribute('aria-pressed',active?'true':'false');
+        el.disabled=!availableTimes.some(t=>timePeriod(t)===el.dataset.period);
+    });
+    const times=availableTimes.filter(t=>timePeriod(t)===period);
+    $('times').innerHTML=times.length?times.map(t=>'<button type="button" data-time="'+t+'" class="'+(t===pickedTime?'chosen':'')+'">'+t+'</button>').join(''):'<p class="muted">この時間帯の空き枠はありません。</p>';
+    document.querySelectorAll('#times [data-time]').forEach(btn=>btn.onclick=()=>{
+        $('customerStep').classList.remove('hidden');
+        pickedTime=btn.dataset.time;
+        document.querySelectorAll('#times [data-time]').forEach(x=>x.classList.toggle('chosen',x===btn));
+        const menu=cfg.menus.find(m=>Number(m.id)===pickedMenu);
+        const blocked=Number(menu?.price||0)>0&&!cfg.stripe_test_enabled;
+        $('bookBtn').disabled=blocked;
+        $('bookBtn').textContent=blocked?'カード決済の設定待ち':Number(menu?.price||0)>0?(cfg.stripe_mode==='live'?'カードで支払って予約する':'Stripeテスト決済に進む'):'無料予約を確定する';
+        $('bookingError').innerHTML=blocked?'<div class="error">現在オンライン決済を設定中のため、申込みを受け付けていません。</div>':'';
+        selection();
+    });
+}
+document.querySelectorAll('#timeFilters [data-period]').forEach(btn=>btn.addEventListener('click',()=>showTimePeriod(btn.dataset.period)));
+async function loadTimes(){
+    pickedTime='';
+    availableTimes=[];
+    $('bookBtn').disabled=true;
+    selection();
+    if(!pickedMenu||!$('date').value){
+        $('times').textContent='メニューと日付を選んでください';
+        return;
+    }
+    $('customerStep').classList.add('hidden');
+    $('times').textContent='読み込み中…';
+    try{
+        const date=$('date').value;
+        const d=await api('availability',{menu_id:pickedMenu,date});
+        if(date!==$('date').value)return;
+        availableTimes=d.times||[];
+        const periods=['morning','afternoon','evening'];
+        const first=periods.find(p=>availableTimes.some(t=>timePeriod(t)===p));
+        showTimePeriod(first||'morning');
+        if(!first)$('times').innerHTML='<p class="muted">この日は空き枠がありません。</p>';
+    }catch(e){error('times',e);}
+}
+function selection(){let menu=cfg.menus?.find(m=>Number(m.id)===pickedMenu);$('selection').textContent=menu&&pickedTime?menu.name+' / '+displayJapaneseDate($('date').value)+' '+pickedTime+' / '+Number(menu.price).toLocaleString('ja-JP')+'円':'';updateReservationSummary();}
 async function init(){try{cfg=await api('config');csrfToken=cfg.csrf;$('brand').textContent=cfg.settings.site_name;$('siteTitle').textContent=cfg.settings.site_name;let adminRoute=location.pathname.replace(/\/$/,'')==='/admin';$('publicView').classList.toggle('hidden',adminRoute);$('adminView').classList.toggle('hidden',!adminRoute);if(adminRoute){if(cfg.admin)await dashboard();return;}if(window.initSiteExtras)window.initSiteExtras();if(cfg.stripe_test_enabled){$('bookBtn').textContent=cfg.stripe_mode==='live'?'カードで支払って予約する':'Stripeテスト決済に進む';}
 else { $('bookBtn').textContent='カード決済の設定待ち'; }
 if(new URLSearchParams(location.search).has('payment')){

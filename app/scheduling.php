@@ -17,24 +17,38 @@ function teacherDirectoryRoute(string $action,string $method): void {
     if($action==='teacherDirectory' && $method==='GET'){
         requireAdmin();
         ensureTeacherDirectoryTable();
-        $rows=db()->query('SELECT t.id,t.name,t.active,t.created_at,p.photo_path,
-           CASE WHEN p.teacher_id IS NULL
-             OR (COALESCE(p.summary,'')='' AND COALESCE(p.career,'')='' AND
-                 COALESCE(p.training,'')='' AND COALESCE(p.message,'')='' AND
-                 COALESCE(p.qualifications_text,'')='' AND COALESCE(p.photo_path,'')='')
-             THEN 0 ELSE 1 END AS profile_registered,
-           CASE WHEN p.photo_path IS NULL OR p.photo_path="" THEN 0 ELSE 1 END AS has_photo,
-           CASE WHEN p.career IS NULL OR p.career="" THEN 0 ELSE 1 END AS has_career,
-           (SELECT COUNT(*) FROM teacher_qualifications tq WHERE tq.teacher_id=t.id) AS qualification_count
-           FROM teachers t LEFT JOIN teacher_profiles p ON p.teacher_id=t.id ORDER BY t.id')->fetchAll();
+        // The core directory must remain usable even before optional profile migrations.
+        $tables=db()->query("SELECT TABLE_NAME FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND TABLE_NAME IN ('teacher_profiles','teacher_qualifications')")->fetchAll(PDO::FETCH_COLUMN);
+        $hasProfiles=in_array('teacher_profiles',$tables,true);
+        $hasQualifications=in_array('teacher_qualifications',$tables,true);
+        $query='SELECT t.id,t.name,t.active,t.created_at,';
+        $query.=$hasProfiles ?
+          "p.photo_path,
+           CASE WHEN p.teacher_id IS NULL OR
+             (COALESCE(p.summary,'')='' AND COALESCE(p.career,'')='' AND
+              COALESCE(p.training,'')='' AND COALESCE(p.message,'')='' AND
+              COALESCE(p.qualifications_text,'')='' AND COALESCE(p.photo_path,'')='')
+            THEN 0 ELSE 1 END AS profile_registered,
+           CASE WHEN COALESCE(p.photo_path,'')='' THEN 0 ELSE 1 END AS has_photo,
+           CASE WHEN COALESCE(p.career,'')='' THEN 0 ELSE 1 END AS has_career," :
+          "NULL AS photo_path, 0 AS profile_registered, 0 AS has_photo, 0 AS has_career,";
+        $query.=$hasQualifications ?
+          '(SELECT COUNT(*) FROM teacher_qualifications tq WHERE tq.teacher_id=t.id) AS qualification_count' :
+          '0 AS qualification_count';
+        $query.=' FROM teachers t';
+        if($hasProfiles)$query.=' LEFT JOIN teacher_profiles p ON p.teacher_id=t.id';
+        $query.=' ORDER BY t.id';
+        $rows=db()->query($query)->fetchAll();
         $statistics=['profiles'=>0,'photos'=>0,'careers'=>0,'qualifications'=>0];
-        foreach($rows as $t){
-           $statistics['profiles']+=(int)$t['profile_registered'];
-           $statistics['photos']+=(int)$t['has_photo'];
-           $statistics['careers']+=(int)$t['has_career'];
-           $statistics['qualifications']+=(int)$t['qualification_count'];
+        foreach($rows as $row){
+            $statistics['profiles']+=(int)$row['profile_registered'];
+            $statistics['photos']+=(int)$row['has_photo'];
+            $statistics['careers']+=(int)$row['has_career'];
+            $statistics['qualifications']+=(int)$row['qualification_count'];
         }
-        jsonOut(['teachers'=>$rows,'statistics'=>$statistics,
+        jsonOut(['teachers'=>$rows,'statistics'=>$statistics,'profiles_ready'=>$hasProfiles&&$hasQualifications,
           'reference_count'=>count(require __DIR__.'/teacher-directory.php'),'master'=>isMasterAdmin()]);
     }
     if($action==='teacherBulkImport' && $method==='POST'){

@@ -48,6 +48,45 @@ function scheduleAllows(int $menuId,?int $teacherId,string $date,string $from,st
     return true;
 }
 function scheduleRoute(string $action,string $method): void {
+    if($action==='scheduleExplain' && $method==='GET'){
+        requireAdmin();
+        $date=(string)($_GET['date']??'');$menuId=(int)($_GET['menu_id']??0);
+        if(!dateValid($date)||$menuId<1)fail('日付とメニューを指定してください');
+        $q=db()->prepare('SELECT m.id,m.name,m.duration,m.active,m.teacher_id,t.name AS teacher_name,t.active AS teacher_active FROM menus m LEFT JOIN teachers t ON t.id=m.teacher_id WHERE m.id=?');
+        $q->execute([$menuId]);$menu=$q->fetch();
+        if(!$menu)fail('メニューが見つかりません',404);
+        $settings=prefs();$reasons=[];
+        $weekday=(string)(new DateTimeImmutable($date))->format('w');
+        $closed=array_filter(explode(',',(string)($settings['closed_weekdays']??'')),fn($x)=>$x!=='');
+        $dates=array_map('trim',explode(',',(string)($settings['closed_dates']??'')));
+        if(in_array($weekday,$closed,true))$reasons[]=['scope'=>'store','status'=>'deny','text'=>'店舗の定休日に指定された曜日です'];
+        if(in_array($date,$dates,true))$reasons[]=['scope'=>'store','status'=>'deny','text'=>'店舗の臨時休業日に指定されています'];
+        if(!(int)$menu['active'])$reasons[]=['scope'=>'menu','status'=>'deny','text'=>'このメニューは非公開です'];
+        if($menu['teacher_id']!==null && !(int)$menu['teacher_active'])$reasons[]=['scope'=>'teacher','status'=>'deny','text'=>'担当の先生が停止中です'];
+        $tz=new DateTimeZone(date_default_timezone_get());
+        $day=new DateTimeImmutable($date.' 00:00:00',$tz);$today=new DateTimeImmutable('today',$tz);
+        if($day<$today)$reasons[]=['scope'=>'store','status'=>'deny','text'=>'過去の日付です'];
+        if($day>$today->modify('+'.(int)($settings['max_advance_days']??90).' days'))$reasons[]=['scope'=>'store','status'=>'deny','text'=>'予約受付可能な日数を超えています'];
+        $times=(int)$menu['active']?availability($menuId,$date):[];
+        $rules=[];
+        foreach(scheduleRules() as $rule){
+            if(!(int)$rule['enabled']||!scheduleApplies($rule,$date))continue;
+            if($rule['scope']==='teacher' && (int)$rule['target_id']!==(int)$menu['teacher_id'])continue;
+            if($rule['scope']==='menu' && (int)$rule['target_id']!==$menuId)continue;
+            $rules[]=[
+              'scope'=>$rule['scope'],'decision'=>$rule['decision'],
+              'label'=>$rule['label']?:($rule['decision']==='deny'?'受付禁止条件':'受付許可条件'),
+              'start_time'=>$rule['start_time'],'end_time'=>$rule['end_time']
+            ];
+        }
+        if(!$times && !$reasons){
+            if(!$rules)$reasons[]=['scope'=>'bookings','status'=>'info','text'=>'受付可能枠がありません。営業時間、予約済み枠、予約締切時間をご確認ください'];
+            else $reasons[]=['scope'=>'bookings','status'=>'info','text'=>'条件適用後の空き枠がありません。既存予約や受付締切時間も影響します'];
+        }
+        if($times)$reasons[]=['scope'=>'bookings','status'=>'allow','text'=>'受付可能な時間が'.count($times).'枠あります'];
+        jsonOut(['date'=>$date,'menu'=>$menu['name'],'teacher'=>$menu['teacher_name'],'times'=>$times,'reasons'=>$reasons,'rules'=>$rules,
+          'store_hours'=>($settings['open_time']??'07:00').'〜'.($settings['close_time']??'22:00')]);
+    }
     if($action==='schedulingData' && $method==='GET'){
         requireAdmin();
         jsonOut(['teachers'=>scheduleTeachers(),'rules'=>scheduleRules(),

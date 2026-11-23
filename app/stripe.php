@@ -32,7 +32,16 @@ function stripeApi(string $endpoint,array $params,string $idempotency): array {
     curl_close($ch);
     $json=is_string($body)?json_decode($body,true):null;
     if($status<200 || $status>=300 || !is_array($json)||empty($json['id'])) {
-        error_log('[stripe] session creation failed HTTP '.$status);
+        // Log Stripe's safe error classification, never card data, keys or full response bodies.
+        $stripeError=is_array($json)?($json['error']??null):null;
+        $code=is_array($stripeError)?(string)($stripeError['code']??''):'';
+        $type=is_array($stripeError)?(string)($stripeError['type']??''):'';
+        $param=is_array($stripeError)?(string)($stripeError['param']??''):'';
+        error_log('[stripe] session creation failed HTTP '.$status
+            .' type='.preg_replace('/[^a-zA-Z0-9_]/','',substr($type,0,80))
+            .' code='.preg_replace('/[^a-zA-Z0-9_]/','',substr($code,0,80))
+            .' param='.preg_replace('/[^a-zA-Z0-9_\.\[\]]/','',substr($param,0,80))
+            .' curl_error='.($body===false?'yes':'no'));
         fail('決済画面の準備に失敗しました。もう一度お試しください',502);
     }
     return $json;

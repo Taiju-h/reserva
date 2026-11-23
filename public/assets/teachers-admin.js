@@ -21,6 +21,7 @@
      const migrate=get('migrateTeacherProfiles');
      if(migrate)migrate.hidden=!master;
      const sync=get('syncTeacherDetails');if(sync)sync.hidden=!master;
+     const retry=get('syncMissingTeacherDetails');if(retry)retry.hidden=!master;
    }catch(err){
      const message=err.message||String(err);
      get('teacherDirectoryResult').textContent='先生一覧を取得できません：'+message;
@@ -86,43 +87,58 @@
    };
    let stopSync=false;
    const syncBtn=get('syncTeacherDetails');
+   const retryBtn=get('syncMissingTeacherDetails');
    const cancelBtn=get('cancelTeacherSync');
    if(cancelBtn)cancelBtn.onclick=()=>{stopSync=true;cancelBtn.disabled=true;};
-   if(syncBtn)syncBtn.onclick=async()=>{
-     if(!confirm('42名の公開プロフィールから経歴・資格・写真を取得し、保存します。登録済みの手入力データは保持します。実行しますか？'))return;
+   async function runTeacherSync(onlyMissing){
+     const mode=onlyMissing?'写真・経歴・資格の未取得者だけ':'42名全員';
+     if(!confirm(mode+'の掲載元データを照合します。手入力内容は維持します。よろしいですか？'))return;
      const progress=get('teacherSyncProgress');
      const summary=get('teacherDirectoryResult');
      stopSync=false;
-     syncBtn.disabled=true;cancelBtn.hidden=false;cancelBtn.disabled=false;
+     syncBtn.disabled=true;if(retryBtn)retryBtn.disabled=true;
+     cancelBtn.hidden=false;cancelBtn.disabled=false;
      const outcomes=[];
      try{
-       progress.textContent='プロフィールDBと資格マスターを準備中…';
-       const migration=await api('migrateTeacherProfiles',{},{});
-       const count=Number(migration.migration?.teachers||42);
-       for(let i=0;i<count;i++){
-         if(stopSync)break;
-         progress.textContent='掲載元から取得中 '+(i+1)+' / '+count+'名。完了 '+outcomes.filter(x=>x.ok).length+'名';
-         try{
-           const response=await api('teacherSyncOne',{}, {index:i});
-           outcomes.push(response.result);
-         }catch(e){outcomes.push({name:'番号 '+(i+1),ok:false,status:e.message||String(e),photo:false});}
-         const successful=outcomes.filter(x=>x.ok).length;
-         const photos=outcomes.filter(x=>x.photo).length;
-         progress.innerHTML='<strong>確認済み '+outcomes.length+' / '+count+'名・詳細取得 '+successful+'名・写真 '+photos+'名</strong>'+
-           '<div class="hana-sync-results">'+outcomes.map(x=>'<div>'+(x.ok?'✓ ':'× ')+escape(x.name)+'：'+escape(x.status||'')+
-           '／写真 '+(x.photo?'取得':escape(x.photo_status||'未取得'))+
-           (x.qualifications!=null?'／資格 '+Number(x.qualifications)+'件':'')+'</div>').join('')+'</div>';
+       progress.textContent='プロフィールDBと資格マスターを確認中…';
+       await api('migrateTeacherProfiles',{},{});
+       // Directory order is fixed in the source snapshot, not the DB auto increment ID.
+       // The returned source_index must be used for each request.
+       const source=await api('teacherSourceStatus');
+       const candidates=(source.teachers||[]).filter(t=>!onlyMissing||t.missing);
+       if(!candidates.length){
+         progress.textContent='未取得の先生は現在いません。';
+         return;
        }
-       summary.textContent=stopSync?'取得を中止しました。もう一度押すと最初から照合できます。':
-         '取得処理が完了しました。写真と経歴の未取得者は下の結果一覧で確認できます。';
+       for(let n=0;n<candidates.length;n++){
+         if(stopSync)break;
+         const target=candidates[n];
+         progress.textContent='取得中 '+(n+1)+' / '+candidates.length+'名：'+target.name;
+         try{
+           const response=await api('teacherSyncOne',{}, {index:target.source_index});
+           outcomes.push(response.result);
+         }catch(e){outcomes.push({name:target.name,ok:false,status:e.message||String(e),photo:false});}
+         const success=outcomes.filter(x=>x.ok).length;
+         const photos=outcomes.filter(x=>x.photo).length;
+         progress.innerHTML='<strong>処理済み '+outcomes.length+' / '+candidates.length+'名・個別ページ '+success+'名・写真取得 '+photos+'名</strong>'+
+           '<div class="hana-sync-results">'+outcomes.map(x=>'<div>'+(x.ok?'✓ ':'! ')+escape(x.name)+'：'+escape(x.status||'')+
+           '／写真 '+(x.photo?'取得':escape(x.photo_status||'未取得'))+
+           (x.qualifications!=null?'／個別ページ資格 '+Number(x.qualifications)+'件':'')+'</div>').join('')+'</div>';
+       }
+       const refreshed=await api('teacherSourceStatus');
+       summary.textContent=(stopSync?'中止しました。':'補完処理完了。')+
+         ' DB保存済み：写真 '+refreshed.photos+'名、経歴 '+refreshed.careers+'名、資格紐付け '+refreshed.qualification_links+'件。未取得 '+refreshed.missing_count+'名。';
        await refresh();
        if(window.refreshTeacherQualifications)await window.refreshTeacherQualifications();
      }catch(e){
-       summary.textContent='取得処理を開始できません：'+(e.message||String(e));
+       summary.textContent='補完処理でエラー：'+(e.message||String(e));
      }finally{
-       syncBtn.disabled=false;cancelBtn.hidden=true;
+       syncBtn.disabled=false;if(retryBtn)retryBtn.disabled=false;
+       cancelBtn.hidden=true;
      }
-   };
+   }
+   if(syncBtn)syncBtn.onclick=()=>runTeacherSync(false);
+   if(retryBtn)retryBtn.onclick=()=>runTeacherSync(true);
    get('teacherDirectorySearch').oninput=renderRows;
    get('bulkImportTeachers').onclick=async()=>{
      if(!confirm('ハナマル総合研究所の掲載者42名を登録します。登録済みの先生は重複追加しません。よろしいですか？'))return;

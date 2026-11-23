@@ -242,6 +242,13 @@ function syncMemberOne(int $index): array {
       '村井 美月'=>'murai/',
       '吉村千鶴子'=>'%E5%90%89%E6%9D%91%E5%8D%83%E9%B6%B4%E5%AD%90/',
       '木村亮'=>'%E6%9C%A8%E6%9D%91%E4%BA%AE/',
+      'きし なおこ'=>'%E3%81%8D%E3%81%97-%E3%81%AA%E3%81%8A%E3%81%93/',
+      '岡田 久美子'=>'%E5%B2%A1%E7%94%B0%E4%B9%85%E7%BE%8E%E5%AD%90/',
+      '合田 菜実子'=>'4193-2/',
+      'パトリック'=>'patrick-2/',
+      '瀬戸裕子'=>'y_seto/',
+      '今泉理絵'=>'eri/',
+      '武田竹美'=>'%E6%AD%A6%E7%94%B0%E7%AB%B9%E7%BE%8E/',
     ];
     if(isset($paths[$name]))$links[]=$listing.$paths[$name];
     $links=array_values(array_unique($links));

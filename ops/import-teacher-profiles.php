@@ -328,6 +328,11 @@ foreach($names as $name){
     break;
   }
   $photoUrl=$detail?photoFrom(parseHtml($detail),$detailUrl):null;
+  // Source-verified image URL where markup heuristics cannot find the headshot.
+  $knownPhotoUrls=[
+    '上田 晶美'=>'https://hanamaru-souken.com/forexport2013_5_2/wp/wp-content/uploads/2019/10/DSC_3553-e1629805883326.jpg'
+  ];
+  if(!$photoUrl && isset($knownPhotoUrls[$name]))$photoUrl=$knownPhotoUrls[$name];
   if(!$photoUrl)$photoUrl=archivePhoto($xp,$name,$source);
   $photo=$photoUrl?savePhoto($photoUrl,$id,$root):null;
   $save->execute([$id,$summary,$fields['career'],$fields['qualifications_text'],$fields['training'],$fields['activity_area'],$fields['message'],$photo,$photo?$photoUrl:null,$detailUrl?:$source]);

@@ -17,8 +17,21 @@ function teacherDirectoryRoute(string $action,string $method): void {
     if($action==='teacherDirectory' && $method==='GET'){
         requireAdmin();
         ensureTeacherDirectoryTable();
-        $rows=db()->query('SELECT id,name,active,created_at FROM teachers ORDER BY id')->fetchAll();
-        jsonOut(['teachers'=>$rows,'reference_count'=>count(require __DIR__.'/teacher-directory.php'),'master'=>isMasterAdmin()]);
+        $rows=db()->query('SELECT t.id,t.name,t.active,t.created_at,
+           CASE WHEN p.teacher_id IS NULL THEN 0 ELSE 1 END AS profile_registered,
+           CASE WHEN p.photo_path IS NULL OR p.photo_path="" THEN 0 ELSE 1 END AS has_photo,
+           CASE WHEN p.career IS NULL OR p.career="" THEN 0 ELSE 1 END AS has_career,
+           (SELECT COUNT(*) FROM teacher_qualifications tq WHERE tq.teacher_id=t.id) AS qualification_count
+           FROM teachers t LEFT JOIN teacher_profiles p ON p.teacher_id=t.id ORDER BY t.id')->fetchAll();
+        $statistics=['profiles'=>0,'photos'=>0,'careers'=>0,'qualifications'=>0];
+        foreach($rows as $t){
+           $statistics['profiles']+=(int)$t['profile_registered'];
+           $statistics['photos']+=(int)$t['has_photo'];
+           $statistics['careers']+=(int)$t['has_career'];
+           $statistics['qualifications']+=(int)$t['qualification_count'];
+        }
+        jsonOut(['teachers'=>$rows,'statistics'=>$statistics,
+          'reference_count'=>count(require __DIR__.'/teacher-directory.php'),'master'=>isMasterAdmin()]);
     }
     if($action==='teacherBulkImport' && $method==='POST'){
         requireMasterAdmin();checkCsrf();ensureTeacherDirectoryTable();

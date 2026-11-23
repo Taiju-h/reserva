@@ -289,3 +289,10 @@ header nav a{font-size:13px;color:#555}
  #adminView .hana-qualification-link{flex-direction:column}
  #adminView .hana-qualification-link button,#adminView .hana-qualification-link select{width:100%}
 }
+
+
+#adminView .hana-directory-person{display:flex;align-items:center;gap:12px;min-width:200px}
+#adminView .hana-directory-person img{width:52px;height:58px;flex:none;object-fit:cover;border-radius:7px;border:1px solid #dbe6e2;background:#fff}
+#adminView .hana-directory-photo-empty{display:flex;align-items:center;justify-content:center;flex:none;width:52px;height:58px;border:1px solid #dbe6e2;border-radius:7px;background:#edf2f0;color:#899894;font-size:10px}
+#adminView #teacherDirectoryRows td:last-child{min-width:285px}
+#adminView #teacherDirectoryRows td:last-child button{font-size:12px;padding:8px 10px;margin:2px}

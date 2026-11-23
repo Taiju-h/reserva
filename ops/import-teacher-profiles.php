@@ -106,19 +106,34 @@ function photoFrom(DOMXPath $xp,string $url): ?string {
   return null;
 }
 function findMemberLinks(DOMXPath $xp,array $names,string $base): array {
-  $found=[];$norm=static fn($v)=>preg_replace('/[\\s\\x{3000}]+/u','',trim($v));
-  // Prefer direct member links around each heading, including child/parent/sibling links.
+  $found=[];
+  $norm=static fn($v)=>preg_replace('/[\\s\\x{3000}]+/u','',trim($v));
+  $wanted=[];
+  foreach($names as $name)$wanted[$norm($name)]=$name;
+  // Prefer links whose own visible text is the exact instructor name.
   foreach($xp->query('//a[@href]') as $a){
-    $href=originUrl($a->getAttribute('href'),$base);
-    if(!$href||!preg_match('~^https://(?:www\\.)?hanamaru-souken\\.com/member_list/[^?#]+~',$href))continue;
-    if(rtrim($href,'/')===rtrim($base,'/'))continue;
-    $context=textOf($a);
-    $parent=$a;
-    for($level=0;$level<3;$level++){$parent=$parent->parentNode;if($parent)$context.="\n".textOf($parent);}
-    foreach($names as $name){
-      if(isset($found[$name]))continue;
-      if(str_contains($norm($context),$norm($name)))$found[$name]=$href;
+    $key=$norm(textOf($a));
+    if(!isset($wanted[$key]))continue;
+    $url=originUrl($a->getAttribute('href'),$base);
+    if($url && preg_match('~^https://(?:www\\.)?hanamaru-souken\\.com/member_list/[^?#]+~',$url)
+       && rtrim($url,'/')!==rtrim($base,'/'))$found[$wanted[$key]]=$url;
+  }
+  // If headings contain no direct links, find their nearby link without crossing
+  // into another instructor heading. Never use a whole page ancestor as context.
+  foreach($xp->query('//h2|//h3|//h4') as $heading){
+    $key=$norm(textOf($heading));
+    if(!isset($wanted[$key])||isset($found[$wanted[$key]]))continue;
+    $candidates=[];
+    $nodes=[$heading,$heading->parentNode];
+    foreach($nodes as $node){
+      if(!$node)continue;
+      foreach($xp->query('.//a[@href]',$node) as $a){
+        $url=originUrl($a->getAttribute('href'),$base);
+        if($url&&preg_match('~^https://(?:www\\.)?hanamaru-souken\\.com/member_list/[^?#]+~',$url)
+           && rtrim($url,'/')!==rtrim($base,'/'))$candidates[$url]=true;
+      }
     }
+    if(count($candidates)===1)$found[$wanted[$key]]=array_key_first($candidates);
   }
   return $found;
 }

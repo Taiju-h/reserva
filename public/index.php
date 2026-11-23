@@ -52,7 +52,7 @@ function prefs(): array { return db()->query('SELECT `key`,`value` FROM settings
 function menus(bool $onlyActive=true): array {
     return db()->query('SELECT * FROM menus'.($onlyActive?' WHERE active=1':'').' ORDER BY id DESC')->fetchAll();
 }
-function admin(): bool { return !empty($_SESSION['admin']); }
+function admin(): bool { return activeAdminSession(); }
 function requireAdmin(): void { if (!admin()) fail('管理者ログインが必要です',401); }
 function csrf(): string { if(empty($_SESSION['csrf'])) $_SESSION['csrf']=bin2hex(random_bytes(24)); return $_SESSION['csrf']; }
 function checkCsrf(): void { if (!hash_equals(csrf(),(string)($_SERVER['HTTP_X_CSRF_TOKEN']??''))) fail('CSRFトークンが不正です',403); }
@@ -93,6 +93,7 @@ function availability(int $menuId,string $date): array {
     }
     return $out;
 }
+require_once $root.'/app/admin-users.php';
 require_once $root.'/app/stripe.php';
 require_once $root.'/app/media.php';
 $action=(string)($_GET['action']??'');
@@ -107,21 +108,45 @@ try {
     if($action==='stripeWebhook' && $method==='POST') stripeWebhook();
     if($action==='createCheckout' && $method==='POST') stripeRequestBooking();
     if($action==='paymentStatus' && $method==='GET') stripeStatus();
-    if($action==='config' && $method==='GET') jsonOut(['settings'=>prefs(),'menus'=>menus(),'admin'=>admin(),'csrf'=>csrf(),'stripe_test_enabled'=>stripeEnabled(),'stripe_mode'=>stripeEnabled()?stripeMode():'disabled','payment_method'=>'card','media'=>mediaList()]);
+    if($action==='config' && $method==='GET') jsonOut(['settings'=>prefs(),'menus'=>menus(),'admin'=>admin(),'master'=>isMasterAdmin(),'csrf'=>csrf(),'stripe_test_enabled'=>stripeEnabled(),'stripe_mode'=>stripeEnabled()?stripeMode():'disabled','payment_method'=>'card','media'=>mediaList()]);
     if($action==='availability' && $method==='GET') jsonOut(['times'=>availability((int)($_GET['menu_id']??0),(string)($_GET['date']??''))]);
     if($action==='login' && $method==='POST'){
         checkCsrf();$data=body();$hash=setting('ADMIN_PASSWORD_HASH');
         $attempts=(int)($_SESSION['login_attempts']??0);
         $last=(int)($_SESSION['last_login_failure']??0);
         if($attempts>=5 && time()-$last<900) fail('ログイン試行回数が上限です。15分後に再試行してください',429);
-        if(!$hash || !password_verify((string)($data['password']??''),$hash)){
+        $password=(string)($data['password']??'');
+        $login=trim((string)($data['login_id']??''));
+        $ok=false;$user=null;
+        if($login===''||strtolower($login)==='master'){
+            if($hash!=='' && password_verify($password,$hash)){
+                $ok=true;$login='master';
+            }
+        }else{
+            if(preg_match('/^[A-Za-z0-9_.-]{3,50}$/D',$login)){
+                $q=db()->prepare('SELECT id,login_id,display_name,password_hash,session_version FROM admin_users WHERE login_id=? AND active=1 LIMIT 1');
+                $q->execute([$login]);$user=$q->fetch(PDO::FETCH_ASSOC);
+                if($user && password_verify($password,$user['password_hash']))$ok=true;
+            }
+        }
+        if(!$ok){
             $_SESSION['login_attempts']=($last && time()-$last>=900)?1:$attempts+1;
             $_SESSION['last_login_failure']=time();
             fail('認証に失敗しました',401);
         }
         session_regenerate_id(true);
         unset($_SESSION['login_attempts'],$_SESSION['last_login_failure']);
-        $_SESSION['admin']=true;jsonOut(['ok'=>true,'csrf'=>csrf()]);
+        $_SESSION['admin']=true;
+        $_SESSION['admin_role']=$login==='master'?'master':'staff';
+        if($user){
+            $_SESSION['admin_user_id']=(int)$user['id'];
+            $_SESSION['admin_session_version']=(int)$user['session_version'];
+            $q=db()->prepare('UPDATE admin_users SET last_login_at=NOW() WHERE id=?');
+            $q->execute([(int)$user['id']]);
+        }else{
+            unset($_SESSION['admin_user_id'],$_SESSION['admin_session_version']);
+        }
+        jsonOut(['ok'=>true,'csrf'=>csrf(),'role'=>$_SESSION['admin_role']]);
     }
     if($action==='logout' && $method==='POST'){checkCsrf();$_SESSION=[];session_destroy();jsonOut(['ok'=>true]);}
     if($action==='book' && $method==='POST'){
@@ -173,9 +198,10 @@ try {
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
         finally {bookingUnlock($pdo);}
     }
+    adminUsersRoute($action,$method);
     if($action==='adminData' && $method==='GET'){
         requireAdmin();$q=db()->query('SELECT b.*,m.name AS menu_name FROM bookings b JOIN menus m ON m.id=b.menu_id ORDER BY b.starts_at DESC LIMIT 500');
-        jsonOut(['menus'=>menus(false),'settings'=>prefs(),'bookings'=>$q->fetchAll()]);
+        jsonOut(['menus'=>menus(false),'settings'=>prefs(),'bookings'=>$q->fetchAll(),'master'=>isMasterAdmin()]);
     }
     require_once $root.'/app/operations.php';
     if($action==='importResevaMenus' && $method==='POST'){
@@ -286,7 +312,7 @@ try {
 <section class="panel hidden" id="customerStep"><h2>お客様情報</h2><form id="bookingForm"><div class="row"><div><label>お名前 *</label><input name="name" maxlength="100" required autocomplete="name"></div><div><label>メールアドレス *</label><input name="email" type="email" maxlength="254" required autocomplete="email"></div></div><label>電話番号</label><input name="phone" maxlength="40" autocomplete="tel"><label>備考</label><textarea name="note" maxlength="1000"></textarea><p id="selection" class="muted"></p><div id="bookingError"></div><button id="bookBtn" disabled>予約を確定する</button></form></section><section class="panel extras"><h2>キャンセル待ち登録</h2><p class="muted">満席時に希望日時を登録できます。空きが出た場合の自動通知は準備中です。</p>
 <form id="waitlistForm"><label>メニュー</label><select name="menu_id" required id="waitlistMenu"></select><label>希望日（任意）</label><input name="date" type="date"><label>お名前（任意）</label><input name="name" maxlength="100"><label>メールアドレス</label><input name="email" type="email" maxlength="254" required><button type="submit">キャンセル待ち登録</button><p id="waitlistResult"></p></form><h2>利用可能な月額プラン</h2><p class="muted">現在利用可能なものはありません。</p><h2>利用可能な回数券</h2><p class="muted">現在利用可能なものはありません。</p></section><section class="panel" id="contact"><h2>お問い合わせ</h2><form id="inquiryForm"><label>お名前</label><input name="name" maxlength="100" required><label>メールアドレス</label><input name="email" type="email" maxlength="254" required><label>お問い合わせ内容</label><textarea name="message" minlength="5" maxlength="3000" required></textarea><button type="submit">お問い合わせを送信</button><p id="inquiryResult"></p></form></section><div class="legal-links"><a href="https://reserva.be/hanamarusoudan/terms" target="_blank" rel="noopener noreferrer">現行サービスの利用規約</a><a href="https://reserva.be/hanamarusoudan/privacy" target="_blank" rel="noopener noreferrer">現行サービスのプライバシーポリシー</a><a href="https://reserva.be/hanamarusoudan/tokushohou" target="_blank" rel="noopener noreferrer">現行サービスの特商法表示</a></div></main>
 <main id="adminView" class="hidden"><div class="hero"><h1>予約管理</h1><p>予約・メニュー・営業時間を管理します。</p></div>
-<section id="loginPanel" class="panel"><h2>管理者ログイン</h2><form id="loginForm"><label>管理者パスワード</label><input type="password" id="password" required><p id="loginError"></p><button>ログイン</button></form></section>
+<section id="loginPanel" class="panel"><h2>管理者ログイン</h2><form id="loginForm"><label for="adminLoginId">ログインID（マスターは空欄でも可）</label><input id="adminLoginId" name="login_id" autocomplete="username" placeholder="master または登録したID"><label for="password">パスワード</label><input type="password" id="password" autocomplete="current-password" required><p id="loginError"></p><button>ログイン</button></form></section>
 <div id="dashboard" class="hidden">
 <div class="hana-admin-layout">
 <aside class="hana-admin-sidebar" aria-label="管理メニュー">
@@ -298,6 +324,7 @@ try {
 <button type="button" class="hana-admin-nav" data-admin-page="media">写真・画像</button>
 <button type="button" class="hana-admin-nav" data-admin-page="inquiries">問い合わせ・キャンセル待ち</button>
 <button type="button" class="hana-admin-nav" data-admin-page="settings">営業時間・サイト設定</button>
+<button type="button" class="hana-admin-nav" data-admin-page="users" id="adminUsersNav" hidden>管理者アカウント</button>
 <a class="hana-admin-site-link" href="/" target="_blank" rel="noopener">公開サイトを確認 ↗</a>
 </aside>
 <div class="hana-admin-content">
@@ -322,7 +349,18 @@ try {
 <label>臨時休業日（YYYY-MM-DD、カンマ区切り）</label><input name="closed_dates" placeholder="2026-12-31,2027-01-01">
 <div class="row"><div><label>予約締切（何分前）</label><input type="number" name="lead_minutes" min="0" max="10080" value="60"></div>
 <div><label>何日先まで予約を受け付けるか</label><input type="number" name="max_advance_days" min="1" max="365" value="90"></div></div>
-<p id="settingsError"></p><button>営業時間を保存</button></form></section></div></div></div></main>
+<p id="settingsError"></p><button>営業時間を保存</button></form></section>
+<section class="panel admin-pane" data-admin-section="users" id="adminUsersPane" hidden>
+<h2>管理者アカウント</h2>
+<p class="muted">マスターのみ追加・停止・パスワード再設定ができます。マスターのパスワードは従来の環境設定で管理します。</p>
+<div id="adminUsersTable"></div>
+<h3>管理者を追加</h3>
+<form id="adminUserCreateForm">
+<div class="row"><div><label>ログインID（半角英数字など3～50文字）</label><input name="login_id" minlength="3" maxlength="50" pattern="[A-Za-z0-9_.-]+" autocomplete="off" required></div><div><label>表示名</label><input name="display_name" maxlength="80" required></div></div>
+<label>初期パスワード（12文字以上）</label><input name="password" type="password" minlength="12" maxlength="200" autocomplete="new-password" required>
+<button type="submit">管理者を登録</button><p id="adminUserError"></p>
+</form>
+</section></div></div></div></main>
 <footer>Hanamaru Reservation Platform</footer>
 <script src="/assets/operations.js" defer></script>
 <script src="/assets/site-extras.js" defer></script>
@@ -417,7 +455,7 @@ $('date').min=today();$('date').value=today();showMenus();$('date').onchange=loa
 $('bookingForm').onsubmit=async e=>{e.preventDefault();if(!pickedMenu||!pickedTime)return;let data=Object.fromEntries(new FormData(e.target));$('bookBtn').disabled=true;$('bookingError').innerHTML='';try{const menu=cfg.menus.find(m=>Number(m.id)===pickedMenu);const paid=Number(menu?.price||0)>0;if(paid&&!cfg.stripe_test_enabled)throw new Error('カード決済がまだ設定されていないため、現在は申し込めません。');const result=await api(paid?'createCheckout':'book',{}, {...data,menu_id:pickedMenu,date:$('date').value,time:pickedTime});
 if(result.checkout_url){window.location.assign(result.checkout_url);return;}
 $('bookingForm').innerHTML='<div class="notice"><h2>予約が確定しました</h2><p>予約番号: '+result.booking_id+'</p><p>現在、自動確認メールは送信されません。予約番号と日時を控えてください。</p></div>';loadTimes();}catch(err){error('bookingError',err);$('bookBtn').disabled=false;}};
-$('loginForm').onsubmit=async e=>{e.preventDefault();try{await api('login',{}, {password:$('password').value});$('password').value='';await dashboard();}catch(err){error('loginError',err);}};
+$('loginForm').onsubmit=async e=>{e.preventDefault();try{await api('login',{}, {login_id:$('adminLoginId').value,password:$('password').value});$('password').value='';await dashboard();}catch(err){error('loginError',err);}};
 let currentAdminPage='bookings';
 function adminNavigate(page){
     const sections=document.querySelectorAll('#dashboard [data-admin-section]');
@@ -430,8 +468,8 @@ function adminNavigate(page){
         el.setAttribute('aria-current',selected?'page':'false');
     });
 }
-document.querySelectorAll('#dashboard [data-admin-page]').forEach(el=>el.addEventListener('click',()=>adminNavigate(el.dataset.adminPage)));
-async function dashboard(){const d=await api('adminData');$('loginPanel').classList.add('hidden');$('dashboard').classList.remove('hidden');
+document.querySelectorAll('#dashboard [data-admin-page]').forEach(el=>el.addEventListener('click',()=>{adminNavigate(el.dataset.adminPage);if(el.dataset.adminPage==='users')refreshAdminUsers().catch(e=>alert(e.message));}));
+async function dashboard(){const d=await api('adminData');$('loginPanel').classList.add('hidden');$('dashboard').classList.remove('hidden');$('adminUsersNav').hidden=!d.master;$('adminUsersPane').dataset.master=d.master?'yes':'no';
 $('bookings').innerHTML=d.bookings.map(b=>'<tr><td>'+b.id+'</td><td>'+esc(b.starts_at)+'</td><td>'+esc(b.menu_name)+'</td><td>'+esc(b.customer_name)+'</td><td>'+esc(b.email)+'<br>'+esc(b.phone)+'</td><td>'+esc(b.status==='pending_review'?'申込み・確認待ち':b.status)+'</td><td><button class="secondary" data-book="'+b.id+'" data-status="'+(b.status==='confirmed'?'cancelled':'confirmed')+'">'+(b.status==='confirmed'?'取消':b.status==='pending_review'?'申込みを確定':'復帰')+'</button></td></tr>').join('');
 document.querySelectorAll('[data-book]').forEach(b=>b.onclick=async()=>{if(!confirm(b.dataset.status==='confirmed'?'予約を確定しますか？ 料金は当日現地払いです。':'この予約を取り消しますか？'))return;try{await api('setStatus',{}, {id:Number(b.dataset.book),status:b.dataset.status});await dashboard();}catch(e){alert(e.message);}});
 $('menuEditor').innerHTML=d.menus.map(m=>'<div class="actions" style="padding:9px;border-bottom:1px solid #eee"><b>'+esc(m.name)+'</b><span>'+m.duration+'分 / '+Number(m.price).toLocaleString()+'円 / '+(m.active?'公開':'非公開')+'</span><button class="secondary" data-edit="'+m.id+'">編集</button></div>').join('');
@@ -441,6 +479,29 @@ if(window.refreshSiteExtras)await window.refreshSiteExtras();
 adminNavigate(currentAdminPage);
 }
 $('refresh').onclick=()=>dashboard().catch(e=>alert(e.message));
+async function refreshAdminUsers(){
+    const data=await api('adminUsers');
+    $('adminUsersTable').innerHTML='<div class="scroll"><table><thead><tr><th>ID</th><th>表示名</th><th>状態</th><th>最終ログイン</th><th>操作</th></tr></thead><tbody>'+
+    data.users.map(u=>'<tr><td>'+esc(u.login_id)+'</td><td>'+esc(u.display_name)+'</td><td>'+(Number(u.active)?'有効':'停止')+'</td><td>'+esc(u.last_login_at||'未ログイン')+'</td><td><button type="button" class="secondary" data-user-id="'+Number(u.id)+'" data-user-action="'+(Number(u.active)?'disable':'enable')+'">'+(Number(u.active)?'停止':'有効化')+'</button> <button type="button" class="secondary" data-user-id="'+Number(u.id)+'" data-user-action="reset_password">パスワード変更</button></td></tr>').join('')+'</tbody></table></div>';
+    document.querySelectorAll('#adminUsersTable [data-user-action]').forEach(b=>b.onclick=async()=>{
+        const operation=b.dataset.userAction,id=Number(b.dataset.userId);
+        let password='';
+        if(operation==='reset_password'){
+            password=prompt('新しいパスワードを入力してください（12文字以上）')||'';
+            if(!password)return;
+            if(password.length<12){alert('12文字以上で入力してください');return;}
+        }else if(!confirm(operation==='disable'?'この管理者を停止しますか？':'この管理者を有効化しますか？'))return;
+        try{await api('adminUserUpdate',{}, {id,operation,...(password?{password}:{})});await refreshAdminUsers();}catch(e){alert(e.message);}
+    });
+}
+$('adminUserCreateForm').onsubmit=async e=>{
+    e.preventDefault();
+    const form=e.target;
+    try{
+        await api('adminUserCreate',{},Object.fromEntries(new FormData(form)));
+        form.reset();$('adminUserError').textContent='登録しました';await refreshAdminUsers();
+    }catch(err){error('adminUserError',err);}
+};
 $('logout').onclick=async()=>{await api('logout',{},{});location.reload();};
 $('importResevaMenus').onclick=async()=>{if(!confirm('RESERVAの8メニューを登録・公開し、上田晶美に相談を7,000円、マネー相談を6,500円、その他を5,500円に更新します。よろしいですか？'))return;const btn=$('importResevaMenus');btn.disabled=true;try{const r=await api('importResevaMenus',{},{});await dashboard();alert(r.added+'件を追加、'+r.updated+'件を更新しました。全8メニューの指定価格を反映しました。');}catch(e){alert(e.message);}finally{btn.disabled=false;}};
 $('resetMenu').onclick=()=>{$('menuForm').reset();$('menuForm').elements.id.value='';};

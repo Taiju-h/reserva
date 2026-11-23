@@ -151,3 +151,13 @@ CREATE TABLE IF NOT EXISTS teacher_qualifications (
  CONSTRAINT fk_tq_teacher FOREIGN KEY(teacher_id) REFERENCES teachers(id) ON DELETE CASCADE,
  CONSTRAINT fk_tq_qualification FOREIGN KEY(qualification_id) REFERENCES qualification_master(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Portrait assets retained in MySQL rather than ephemeral container file storage.
+CREATE TABLE IF NOT EXISTS teacher_photo_assets (
+ teacher_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+ mime VARCHAR(32) NOT NULL,
+ image_bytes MEDIUMBLOB NOT NULL,
+ original_url TEXT NULL,
+ imported_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ CONSTRAINT fk_teacher_photo_asset FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -223,3 +223,11 @@ header nav a{font-size:13px;color:#555}
  #adminView .hana-admin-sidebar{flex-wrap:nowrap;scrollbar-width:thin}
  #adminView .hana-admin-nav{white-space:nowrap}
 }
+
+
+/* Admin identity management is invisible to non-master accounts. */
+#adminView #adminUsersNav[hidden],
+#adminView #adminUsersPane[hidden]{display:none!important}
+#adminView #adminUsersPane h3{margin-top:26px}
+#adminView #adminUsersTable .scroll{overflow:auto}
+#adminView #adminUsersTable button{padding:8px 11px;font-size:13px}

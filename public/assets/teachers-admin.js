@@ -20,6 +20,7 @@
      button.hidden=!master;
      const migrate=get('migrateTeacherProfiles');
      if(migrate)migrate.hidden=!master;
+     const sync=get('syncTeacherDetails');if(sync)sync.hidden=!master;
    }catch(err){
      const message=err.message||String(err);
      get('teacherDirectoryResult').textContent='先生一覧を取得できません：'+message;
@@ -82,6 +83,45 @@
        if(window.refreshTeacherQualifications)await window.refreshTeacherQualifications();
      }catch(err){status.textContent='DB移行に失敗しました：'+(err.message||String(err));}
      finally{migrate.disabled=false;}
+   };
+   let stopSync=false;
+   const syncBtn=get('syncTeacherDetails');
+   const cancelBtn=get('cancelTeacherSync');
+   if(cancelBtn)cancelBtn.onclick=()=>{stopSync=true;cancelBtn.disabled=true;};
+   if(syncBtn)syncBtn.onclick=async()=>{
+     if(!confirm('42名の公開プロフィールから経歴・資格・写真を取得し、保存します。登録済みの手入力データは保持します。実行しますか？'))return;
+     const progress=get('teacherSyncProgress');
+     const summary=get('teacherDirectoryResult');
+     stopSync=false;
+     syncBtn.disabled=true;cancelBtn.hidden=false;cancelBtn.disabled=false;
+     const outcomes=[];
+     try{
+       progress.textContent='プロフィールDBと資格マスターを準備中…';
+       const migration=await api('migrateTeacherProfiles',{},{});
+       const count=Number(migration.migration?.teachers||42);
+       for(let i=0;i<count;i++){
+         if(stopSync)break;
+         progress.textContent='掲載元から取得中 '+(i+1)+' / '+count+'名。完了 '+outcomes.filter(x=>x.ok).length+'名';
+         try{
+           const response=await api('teacherSyncOne',{}, {index:i});
+           outcomes.push(response.result);
+         }catch(e){outcomes.push({name:'番号 '+(i+1),ok:false,status:e.message||String(e),photo:false});}
+         const successful=outcomes.filter(x=>x.ok).length;
+         const photos=outcomes.filter(x=>x.photo).length;
+         progress.innerHTML='<strong>確認済み '+outcomes.length+' / '+count+'名・詳細取得 '+successful+'名・写真 '+photos+'名</strong>'+
+           '<div class="hana-sync-results">'+outcomes.map(x=>'<div>'+(x.ok?'✓ ':'× ')+escape(x.name)+'：'+escape(x.status||'')+
+           '／写真 '+(x.photo?'取得':escape(x.photo_status||'未取得'))+
+           (x.qualifications!=null?'／資格 '+Number(x.qualifications)+'件':'')+'</div>').join('')+'</div>';
+       }
+       summary.textContent=stopSync?'取得を中止しました。もう一度押すと最初から照合できます。':
+         '取得処理が完了しました。写真と経歴の未取得者は下の結果一覧で確認できます。';
+       await refresh();
+       if(window.refreshTeacherQualifications)await window.refreshTeacherQualifications();
+     }catch(e){
+       summary.textContent='取得処理を開始できません：'+(e.message||String(e));
+     }finally{
+       syncBtn.disabled=false;cancelBtn.hidden=true;
+     }
    };
    get('teacherDirectorySearch').oninput=renderRows;
    get('bulkImportTeachers').onclick=async()=>{

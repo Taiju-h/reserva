@@ -187,6 +187,37 @@ function savePhoto(?string $url,int $id,string $root): ?string {
 $archive=fetchOrigin($source);
 if(!$archive){fwrite(STDERR,"Could not fetch member list. Nothing imported.\n");exit(1);}
 $xp=parseHtml($archive);$links=findMemberLinks($xp,$names,$source);
+// Fallback: some member listings do not link every individual detail page.
+// Discover published member detail permalinks from the WordPress sitemap.
+if(count($links)<count($names)){
+  $sitemaps=[
+    $base.'/wp-sitemap-posts-member_list-1.xml',
+    $base.'/member_list-sitemap.xml',
+    $base.'/wp-sitemap-posts-member-1.xml'
+  ];
+  foreach($sitemaps as $sitemap){
+    if(count($links)>=count($names))break;
+    $xml=fetchOrigin($sitemap);
+    if(!$xml)continue;
+    preg_match_all('~<loc>\\s*(https?://[^<]+)\\s*</loc>~i',$xml,$matches);
+    foreach(array_unique($matches[1]) as $url){
+      $url=originUrl($url,$base.'/');
+      if(!$url||!preg_match('~^https://(?:www\\.)?hanamaru-souken\\.com/member_list/[^?#]+~',$url))continue;
+      if(in_array($url,$links,true))continue;
+      $page=fetchOrigin($url);
+      if(!$page)continue;
+      $pageXp=parseHtml($page);
+      $headline=$pageXp->query('//h1')->item(0);
+      if(!$headline)continue;
+      $title=$normalize(textOf($headline));
+      foreach($names as $name){
+        if(!isset($links[$name])&&$normalize($name)===$title){$links[$name]=$url;break;}
+      }
+      if(count($links)>=count($names))break;
+    }
+  }
+}
+
 $select=$pdo->prepare('SELECT id FROM teachers WHERE name=? LIMIT 1');
 $all=$pdo->query('SELECT id,name FROM teachers')->fetchAll(PDO::FETCH_ASSOC);
 $existing=[];foreach($all as $row)$existing[$normalize($row['name'])]=(int)$row['id'];
@@ -196,12 +227,12 @@ $save=$pdo->prepare('INSERT INTO teacher_profiles
  (teacher_id,summary,career,qualifications_text,training,activity_area,message,photo_path,photo_source_url,source_url,source_checked_at)
  VALUES(?,?,?,?,?,?,?,?,?,?,NOW())
  ON DUPLICATE KEY UPDATE
- summary=IF(VALUES(summary)="",summary,VALUES(summary)),
- career=IF(VALUES(career)="",career,VALUES(career)),
- qualifications_text=IF(VALUES(qualifications_text)="",qualifications_text,VALUES(qualifications_text)),
- training=IF(VALUES(training)="",training,VALUES(training)),
- activity_area=IF(VALUES(activity_area)="",activity_area,VALUES(activity_area)),
- message=IF(VALUES(message)="",message,VALUES(message)),
+ summary=IF(summary IS NULL OR summary="",VALUES(summary),summary),
+ career=IF(career IS NULL OR career="",VALUES(career),career),
+ qualifications_text=IF(qualifications_text IS NULL OR qualifications_text="",VALUES(qualifications_text),qualifications_text),
+ training=IF(training IS NULL OR training="",VALUES(training),training),
+ activity_area=IF(activity_area IS NULL OR activity_area="",VALUES(activity_area),activity_area),
+ message=IF(message IS NULL OR message="",VALUES(message),message),
  photo_path=COALESCE(VALUES(photo_path),photo_path),
  photo_source_url=COALESCE(VALUES(photo_source_url),photo_source_url),
  source_url=COALESCE(VALUES(source_url),source_url),

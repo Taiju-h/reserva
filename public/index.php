@@ -327,6 +327,7 @@ try {
 <button type="button" class="hana-admin-nav active" data-admin-page="bookings">予約一覧</button>
 <button type="button" class="hana-admin-nav" data-admin-page="manual">手動予約登録</button>
 <button type="button" class="hana-admin-nav" data-admin-page="calendar">予約カレンダー・顧客</button>
+<button type="button" class="hana-admin-nav" data-admin-page="teachers">先生一覧・登録</button>
 <button type="button" class="hana-admin-nav" data-admin-page="scheduling">受付条件・先生の予定</button>
 <button type="button" class="hana-admin-nav" data-admin-page="menus">予約メニュー設定</button>
 <button type="button" class="hana-admin-nav" data-admin-page="media">写真・画像</button>
@@ -343,7 +344,28 @@ try {
 <div class="row"><div><label>メール</label><input type="email" name="email" maxlength="254" required></div><div><label>電話番号</label><input name="phone" maxlength="40"></div></div>
 <label>備考</label><textarea name="note" maxlength="1000"></textarea>
 <button type="submit">予約を登録</button><p id="adminBookResult"></p></form></section>
-<section class="panel admin-pane" data-admin-section="calendar"><h2>予約カレンダー・顧客検索</h2><div id="operations"></div></section><section class="panel admin-pane" data-admin-section="scheduling">
+<section class="panel admin-pane" data-admin-section="calendar"><h2>予約カレンダー・顧客検索</h2><div id="operations"></div></section><section class="panel admin-pane" data-admin-section="teachers">
+<h2>先生一覧・登録</h2>
+<p class="muted">先生の登録・検索・停止・再開を行います。登録済みの先生は「受付条件・先生の予定」でメニューに割り当てられます。</p>
+<div class="actions" style="justify-content:space-between;gap:12px;flex-wrap:wrap">
+  <strong id="teacherDirectoryCount">登録済みの先生を確認中</strong>
+  <button type="button" id="bulkImportTeachers" class="secondary">掲載の42名をまとめて登録</button>
+</div>
+<p id="teacherDirectoryResult" role="status"></p>
+<h3>先生を個別に追加</h3>
+<form id="teacherDirectoryForm" class="hana-inline-form">
+  <input type="text" name="name" maxlength="100" placeholder="先生のお名前" required>
+  <button type="submit">先生を登録</button>
+</form>
+<h3>登録済みの先生</h3>
+<label for="teacherDirectorySearch">名前で検索</label>
+<input type="search" id="teacherDirectorySearch" placeholder="名前の一部を入力" style="max-width:400px">
+<div class="scroll" style="margin-top:14px">
+  <table><thead><tr><th>ID</th><th>先生の名前</th><th>状態</th><th>操作</th></tr></thead>
+  <tbody id="teacherDirectoryRows"><tr><td colspan="4">読み込み中…</td></tr></tbody></table>
+</div>
+</section>
+<section class="panel admin-pane" data-admin-section="scheduling">
 <h2>受付条件・先生の予定</h2>
 <p class="muted">店舗全体 → 先生 → メニューの順に受付条件を管理します。どこかの階層で「受付禁止」に該当すると予約不可になります。受付許可は、同じ階層の該当日に時間を限定します。</p>
 <div id="schedulingAdmin"></div>
@@ -377,6 +399,7 @@ try {
 <footer>Hanamaru Reservation Platform</footer>
 <script src="/assets/operations.js?v=20261123-explain2" defer></script>
 <script src="/assets/scheduling-admin.js?v=20261123-schedule2" defer></script>
+<script src="/assets/teachers-admin.js?v=20261123-teachers1" defer></script>
 <script src="/assets/site-extras.js" defer></script>
 <script>
 'use strict';
@@ -491,6 +514,7 @@ document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{let m=d.menus
 for(let key of ['site_name','open_time','close_time','slot_minutes','closed_weekdays','closed_dates','lead_minutes','max_advance_days'])$('settingsForm').elements[key].value=d.settings[key]??'';
 if(window.refreshSiteExtras)await window.refreshSiteExtras();
 if(window.refreshSchedulingAdmin)await window.refreshSchedulingAdmin();
+if(window.refreshTeacherDirectory)await window.refreshTeacherDirectory();
 adminNavigate(currentAdminPage);
 }
 $('refresh').onclick=()=>dashboard().catch(e=>alert(e.message));

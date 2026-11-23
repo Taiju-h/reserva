@@ -357,6 +357,7 @@ try {
   <button type="button" id="bulkImportTeachers" class="secondary">掲載の42名をまとめて登録</button>
   <button type="button" id="migrateTeacherProfiles" class="secondary" hidden>プロフィール・資格をDBに移行</button>
   <button type="button" id="syncTeacherDetails" class="secondary" hidden>全先生の経歴・資格・写真を取得</button>
+  <button type="button" id="syncMissingTeacherDetails" class="secondary" hidden>未取得の先生だけ再補完</button>
   <button type="button" id="cancelTeacherSync" class="secondary" hidden>取得を中止</button>
 </div>
 <p id="teacherDirectoryResult" role="status"></p>
@@ -414,7 +415,7 @@ try {
 <footer>Hanamaru Reservation Platform</footer>
 <script src="/assets/operations.js?v=20261123-explain2" defer></script>
 <script src="/assets/scheduling-admin.js?v=20261123-schedule2" defer></script>
-<script src="/assets/teachers-admin.js?v=20261123-sync1" defer></script>
+<script src="/assets/teachers-admin.js?v=20261123-sync2" defer></script>
 <script src="/assets/teacher-profiles-admin.js?v=20261123-profile3" defer></script>
 <script src="/assets/site-extras.js" defer></script>
 <script>

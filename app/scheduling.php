@@ -2,6 +2,47 @@
 declare(strict_types=1);
 // Scheduling layers: store > teacher > menu. Denials at ANY matching layer win.
 // All rules are interpreted in the configured Asia/Tokyo time zone.
+function ensureTeacherDirectoryTable(): void {
+    db()->exec('CREATE TABLE IF NOT EXISTS teachers (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+}
+function normalizeTeacherName(string $name): string {
+    return preg_replace('/[\\s\\x{3000}]+/u','',trim($name));
+}
+function teacherDirectoryRoute(string $action,string $method): void {
+    if($action==='teacherDirectory' && $method==='GET'){
+        requireAdmin();
+        ensureTeacherDirectoryTable();
+        $rows=db()->query('SELECT id,name,active,created_at FROM teachers ORDER BY id')->fetchAll();
+        jsonOut(['teachers'=>$rows,'reference_count'=>count(require __DIR__.'/teacher-directory.php'),'master'=>isMasterAdmin()]);
+    }
+    if($action==='teacherBulkImport' && $method==='POST'){
+        requireMasterAdmin();checkCsrf();ensureTeacherDirectoryTable();
+        $names=require __DIR__.'/teacher-directory.php';
+        $pdo=db();
+        $pdo->beginTransaction();
+        try {
+            $existing=$pdo->query('SELECT name FROM teachers')->fetchAll(PDO::FETCH_COLUMN);
+            $known=[];
+            foreach($existing as $name) $known[normalizeTeacherName((string)$name)]=true;
+            $insert=$pdo->prepare('INSERT INTO teachers(name,active) VALUES(?,1)');
+            $added=0;
+            foreach($names as $name){
+                $key=normalizeTeacherName($name);
+                if(isset($known[$key]))continue;
+                $insert->execute([$name]);
+                $known[$key]=true;
+                $added++;
+            }
+            $pdo->commit();
+            jsonOut(['ok'=>true,'added'=>$added,'already_registered'=>count($names)-$added,'reference_count'=>count($names)]);
+        }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+    }
+}
 function scheduleTeachers(): array {
     return db()->query('SELECT id,name,active FROM teachers ORDER BY id')->fetchAll();
 }
@@ -48,6 +89,7 @@ function scheduleAllows(int $menuId,?int $teacherId,string $date,string $from,st
     return true;
 }
 function scheduleRoute(string $action,string $method): void {
+    teacherDirectoryRoute($action,$method);
     if($action==='scheduleExplain' && $method==='GET'){
         requireAdmin();
         $date=(string)($_GET['date']??'');$menuId=(int)($_GET['menu_id']??0);

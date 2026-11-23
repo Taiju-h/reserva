@@ -176,12 +176,36 @@ function syncMemberOne(int $index): array {
             $links[]=$url;
         }
     }
+    // Candidate permalink hints; each destination must pass the exact member-name heading check.
     $paths=[
-      '上田 晶美'=>'ueda/','川又 けい子'=>'k_kawamata/',
+      '上田 晶美'=>'ueda/',
+      '川又 けい子'=>'k_kawamata/',
+      '阿隅和美'=>'k_asumi/',
+      '津村 治美'=>'h_tumura/',
+      '斉藤あゆみ'=>'a_saitou/',
+      '葛本幸枝'=>'s_kudumoto-2/',
+      '川崎あゆみ'=>'%E5%B7%9D%E5%B4%8E%E3%81%82%E3%82%86%E3%81%BF/',
+      '吉田恵子'=>'k_yoshida/',
+      '鈴木誠一郎'=>'%E9%88%B4%E6%9C%A8%E8%AA%A0%E4%B8%80%E9%83%8E/',
       '本田 貴子'=>'%E6%9C%AC%E7%94%B0%E3%80%80%E8%B2%B4%E5%AD%90/',
-      '中尾 あずさ'=>'nakao/','山口朋子'=>'%E5%B1%B1%E5%8F%A3%E6%9C%8B%E5%AD%90/',
+      '中尾 あずさ'=>'nakao/',
+      '吉田 明美'=>'yoshida/',
+      '塚本智美'=>'tsukamoto/',
+      '日向 美穂'=>'%E6%97%A5%E5%90%91-%E7%BE%8E%E7%A9%82/',
+      '江藤隆二'=>'%E6%B1%9F%E8%97%A4/',
+      '内村しづ子'=>'s_uchimura/',
+      '山口朋子'=>'%E5%B1%B1%E5%8F%A3%E6%9C%8B%E5%AD%90/',
+      '小清水ゆり'=>'%E5%B0%8F%E6%B8%85%E6%B0%B4%E3%82%86%E3%82%8A/',
+      '近藤信治'=>'%E8%BF%91%E8%97%A4%E4%BF%A1%E6%B2%BB/',
+      '桑田真理子'=>'m_kuwata/',
+      '木元栄子'=>'e_kimoto/',
+      '永井 恵子'=>'k_nagai/',
+      '梅田昌照'=>'m_umeda/',
       '酒匂 ひろ子'=>'%E9%85%92%E5%8C%82-%E3%81%B2%E3%82%8D%E5%AD%90/',
-      'きし なおこ'=>'%E3%81%8D%E3%81%97-%E3%81%AA%E3%81%8A%E3%81%93/'
+      '木下芳隆'=>'kinoyoshi/',
+      '松岡 真理'=>'4197-2/',
+      '金井 優貴'=>'kanai/',
+      '手嶋由美子'=>'yumiko-teduk/',
     ];
     if(isset($paths[$name]))$links[]=$listing.$paths[$name];
     $links=array_values(array_unique($links));

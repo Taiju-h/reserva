@@ -12,6 +12,9 @@
      master=Boolean(result.master);
      const count=get('teacherDirectoryCount');
      if(count)count.textContent='先生 '+teachers.length+'名 / プロフィール '+Number(result.statistics?.profiles||0)+'名 / 経歴 '+Number(result.statistics?.careers||0)+'名 / 写真 '+Number(result.statistics?.photos||0)+'名 / 資格紐付け '+Number(result.statistics?.qualifications||0)+'件';
+     const message=get('teacherDirectoryResult');
+     if(message && !result.profiles_ready)message.textContent='先生の名前一覧は表示できます。プロフィール・写真・資格のDB移行が未完了です（migrate-teacher-profiles.php）。';
+     else if(message && message.textContent.includes('DB移行が未完了'))message.textContent='';
      renderRows();
      const button=get('bulkImportTeachers');
      button.hidden=!master;

@@ -554,7 +554,7 @@ function loadAdminPage(page,updateUrl=false){
 }
 document.querySelectorAll('#dashboard [data-admin-page]').forEach(el=>el.addEventListener('click',()=>loadAdminPage(el.dataset.adminPage,true)));
 window.addEventListener('popstate',()=>{
-    if(location.pathname.replace(/\\/$/,'')==='/admin' && !$('dashboard').classList.contains('hidden'))loadAdminPage(adminPageFromUrl());
+    if((location.pathname==='/admin'||location.pathname==='/admin/') && !$('dashboard').classList.contains('hidden'))loadAdminPage(adminPageFromUrl());
 });
 async function dashboard(){const d=await api('adminData');$('loginPanel').classList.add('hidden');$('dashboard').classList.remove('hidden');$('adminUsersNav').hidden=!d.master;const faviconSettings=$('faviconSettings');if(faviconSettings)faviconSettings.hidden=!d.master;$('adminUsersPane').dataset.master=d.master?'yes':'no';
 $('bookings').innerHTML=d.bookings.map(b=>'<tr><td>'+b.id+'</td><td>'+esc(b.starts_at)+'</td><td>'+esc(b.menu_name)+'</td><td>'+esc(b.customer_name)+'</td><td>'+esc(b.email)+'<br>'+esc(b.phone)+'</td><td>'+esc(b.status==='pending_review'?'申込み・確認待ち':b.status)+'</td><td><button class="secondary" data-book="'+b.id+'" data-status="'+(b.status==='confirmed'?'cancelled':'confirmed')+'">'+(b.status==='confirmed'?'取消':b.status==='pending_review'?'申込みを確定':'復帰')+'</button></td></tr>').join('');

@@ -17,7 +17,7 @@ function teacherDirectoryRoute(string $action,string $method): void {
     if($action==='teacherDirectory' && $method==='GET'){
         requireAdmin();
         ensureTeacherDirectoryTable();
-        $rows=db()->query('SELECT t.id,t.name,t.active,t.created_at,
+        $rows=db()->query('SELECT t.id,t.name,t.active,t.created_at,p.photo_path,
            CASE WHEN p.teacher_id IS NULL THEN 0 ELSE 1 END AS profile_registered,
            CASE WHEN p.photo_path IS NULL OR p.photo_path="" THEN 0 ELSE 1 END AS has_photo,
            CASE WHEN p.career IS NULL OR p.career="" THEN 0 ELSE 1 END AS has_career,

@@ -1,10 +1,20 @@
 <?php
 declare(strict_types=1);
-// Stripe test-only checkout integration. This file expects helpers from public/index.php.
+// Stripe Checkout: test or live. Secrets stay on the server, never in the repository.
+function stripeMode(): string {
+    $mode=setting('STRIPE_MODE','disabled');
+    return in_array($mode,['test','live'],true)?$mode:'disabled';
+}
 function stripeEnabled(): bool {
-    return setting('STRIPE_MODE')==='test'
-        && str_starts_with(setting('STRIPE_SECRET_KEY'),'sk_test_')
-        && str_starts_with(setting('STRIPE_WEBHOOK_SECRET'),'whsec_');
+    $mode=stripeMode();
+    if($mode==='disabled') return false;
+    if($mode==='live' && setting('STRIPE_LIVE_ENABLED')!=='yes') return false;
+    $secret=setting('STRIPE_SECRET_KEY');
+    $webhook=setting('STRIPE_WEBHOOK_SECRET');
+    return str_starts_with($secret,$mode==='live'?'sk_live_':'sk_test_')
+        && strlen($secret)>16
+        && str_starts_with($webhook,'whsec_')
+        && strlen($webhook)>16;
 }
 function stripeDb(): PDO {
     return db();
@@ -28,7 +38,7 @@ function stripeApi(string $endpoint,array $params,string $idempotency): array {
     return $json;
 }
 function stripeRequestBooking(): never {
-    if(!stripeEnabled()) fail('Stripeテストモードが未設定です',503);
+    if(!stripeEnabled()) fail('カード決済が未設定です',503);
     checkCsrf();$v=body();
     $menuId=(int)($v['menu_id']??0);$date=(string)($v['date']??'');$time=(string)($v['time']??'');
     $name=trim((string)($v['name']??''));$email=trim((string)($v['email']??''));
@@ -75,7 +85,7 @@ function stripeRequestBooking(): never {
             'expires_at'=>time()+1800,
             'success_url'=>$base.'/?payment=success&session_id={CHECKOUT_SESSION_ID}',
             'cancel_url'=>$base.'/?payment=cancel',
-        ],'hanamaru-test-booking-'.$bookingId);
+        ],'hanamaru-'.stripeMode().'-booking-'.$bookingId);
         if(empty($s['url'])||empty($s['id'])||!str_starts_with($s['url'],'https://checkout.stripe.com/')) fail('決済URLが不正です',502);
         $stmt=$db->prepare('UPDATE stripe_payments SET session_id=?,state="checkout" WHERE booking_id=?');
         $stmt->execute([$s['id'],$bookingId]);
@@ -87,7 +97,7 @@ function stripeRequestBooking(): never {
     }
 }
 function stripeWebhook(): never {
-    if(!stripeEnabled()) fail('Stripeテストモードが未設定です',503);
+    if(!stripeEnabled()) fail('カード決済が未設定です',503);
     $payload=file_get_contents('php://input');
     $header=(string)($_SERVER['HTTP_STRIPE_SIGNATURE']??'');
     if(!is_string($payload)||strlen($payload)>131072) fail('Webhook内容が不正です',400);
@@ -104,7 +114,7 @@ function stripeWebhook(): never {
     if(!$matched) fail('署名が不正です',400);
     $event=json_decode($payload,true);
     if(!is_array($event)||empty($event['id'])||!is_string($event['id'])||!is_string($event['type']??null)) fail('イベント内容が不正です');
-    if(($event['livemode']??true)!==false) fail('本番決済イベントは受け付けません');
+    if(!is_bool($event['livemode']??null) || $event['livemode']!==(stripeMode()==='live')) fail('Stripeの決済環境が一致しません',400);
     $type=$event['type'];$session=$event['data']['object']??[];
     $db=stripeDb();bookingLock($db);$db->beginTransaction();
     try {
@@ -144,7 +154,7 @@ function stripeWebhook(): never {
 }
 function stripeStatus(): never {
     $session=(string)($_GET['session_id']??'');
-    if(!preg_match('/^cs_test_[A-Za-z0-9_]+$/',$session)) fail('決済IDが不正です');
+    if(!preg_match('/^cs_(?:test|live)_[A-Za-z0-9_]+$/',$session)) fail('決済IDが不正です');
     $q=stripeDb()->prepare('SELECT b.status,p.state FROM stripe_payments p JOIN bookings b ON b.id=p.booking_id WHERE p.session_id=?');
     $q->execute([$session]);$r=$q->fetch();
     if(!$r)fail('決済状況が見つかりません',404);

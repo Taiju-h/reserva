@@ -101,6 +101,7 @@ function availability(int $menuId,string $date): array {
 require_once $root.'/app/admin-users.php';
 require_once $root.'/app/scheduling.php';
 require_once $root.'/app/teacher-profiles.php';
+require_once $root.'/app/teacher-source-sync.php';
 require_once $root.'/app/stripe.php';
 require_once $root.'/app/media.php';
 $action=(string)($_GET['action']??'');
@@ -108,6 +109,7 @@ $method=$_SERVER['REQUEST_METHOD']??'GET';
 try {
     scheduleRoute($action,$method);
     teacherProfileRoute($action,$method);
+    syncMemberRoute($action,$method);
     if($action==='media' && $method==='GET') mediaServe();
     if($action==='mediaUpload' && $method==='POST') mediaUpload();
     if($action==='mediaDelete' && $method==='POST') mediaDelete();
@@ -354,8 +356,11 @@ try {
   <strong id="teacherDirectoryCount">登録済みの先生を確認中</strong>
   <button type="button" id="bulkImportTeachers" class="secondary">掲載の42名をまとめて登録</button>
   <button type="button" id="migrateTeacherProfiles" class="secondary" hidden>プロフィール・資格をDBに移行</button>
+  <button type="button" id="syncTeacherDetails" class="secondary" hidden>全先生の経歴・資格・写真を取得</button>
+  <button type="button" id="cancelTeacherSync" class="secondary" hidden>取得を中止</button>
 </div>
 <p id="teacherDirectoryResult" role="status"></p>
+<div id="teacherSyncProgress" role="status" aria-live="polite"></div>
 <h3>先生を個別に追加</h3>
 <form id="teacherDirectoryForm" class="hana-inline-form">
   <input type="text" name="name" maxlength="100" placeholder="先生のお名前" required>
@@ -409,7 +414,7 @@ try {
 <footer>Hanamaru Reservation Platform</footer>
 <script src="/assets/operations.js?v=20261123-explain2" defer></script>
 <script src="/assets/scheduling-admin.js?v=20261123-schedule2" defer></script>
-<script src="/assets/teachers-admin.js?v=20261123-migration2" defer></script>
+<script src="/assets/teachers-admin.js?v=20261123-sync1" defer></script>
 <script src="/assets/teacher-profiles-admin.js?v=20261123-profile3" defer></script>
 <script src="/assets/site-extras.js" defer></script>
 <script>

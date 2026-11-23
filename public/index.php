@@ -178,6 +178,32 @@ try {
         jsonOut(['menus'=>menus(false),'settings'=>prefs(),'bookings'=>$q->fetchAll()]);
     }
     require_once $root.'/app/operations.php';
+    if($action==='importResevaMenus' && $method==='POST'){
+        requireAdmin();checkCsrf();
+        // Screenshot-derived names and known durations only. Prices and unsupplied details remain unset.
+        $rows=[
+            ['初めての転職コース',40,'RESERVA参考メニュー。料金・詳細は要設定'],
+            ['仕事もやもや相談',40,'RESERVA参考メニュー。料金・詳細は要設定'],
+            ['学生就活コース',30,'RESERVA参考メニュー。料金・詳細は要設定'],
+            ['女性のキャリア相談コース',40,'RESERVA参考メニュー。料金・詳細は要設定'],
+            ['独立・経営相談',50,'RESERVA参考メニュー。料金・詳細は要設定'],
+            ['上田晶美に相談',50,'RESERVA参考メニュー。料金・詳細は要設定'],
+            ['ビジネス英語力チェック',50,'RESERVA参考メニュー。料金・詳細は要設定'],
+            ['マネー相談',50,'RESERVA参考メニュー。所要時間・料金・詳細は要確認']
+        ];
+        $db=db();$db->beginTransaction();$added=0;
+        try {
+            $exists=$db->prepare('SELECT id FROM menus WHERE name=? LIMIT 1');
+            $create=$db->prepare('INSERT INTO menus(name,description,duration,price,active) VALUES(?,?,?,0,0)');
+            foreach($rows as [$name,$minutes,$desc]){
+                $exists->execute([$name]);
+                if($exists->fetchColumn()!==false) continue;
+                $create->execute([$name,$desc,$minutes]);$added++;
+            }
+            $db->commit();
+        } catch(Throwable $e) { if($db->inTransaction())$db->rollBack();throw $e; }
+        jsonOut(['ok'=>true,'added'=>$added]);
+    }
     if($action==='saveMenu' && $method==='POST'){
         requireAdmin();checkCsrf();$v=body();
         $id=(int)($v['id']??0);$name=trim((string)($v['name']??''));$desc=trim((string)($v['description']??''));
@@ -260,7 +286,7 @@ try {
 <div class="row"><div><label>メール</label><input type="email" name="email" maxlength="254" required></div><div><label>電話番号</label><input name="phone" maxlength="40"></div></div>
 <label>備考</label><textarea name="note" maxlength="1000"></textarea>
 <button type="submit">予約を登録</button><p id="adminBookResult"></p></form></section>
-<section class="panel"><h2>予約カレンダー・顧客検索</h2><div id="operations"></div></section><section class="panel"><h2>予約メニュー設定</h2><div id="menuEditor"></div><h3>メニュー追加・編集</h3><form id="menuForm"><input type="hidden" name="id"><label>メニュー名</label><input name="name" required maxlength="100"><label>説明</label><textarea name="description" maxlength="2000"></textarea><div class="row"><div><label>所要時間（分）</label><input name="duration" type="number" min="5" max="600" value="50" required></div><div><label>価格（円）</label><input name="price" type="number" min="0" value="5500" required></div></div><label><input style="width:auto" type="checkbox" name="active" checked> 公開する</label><button>保存</button> <button type="button" class="secondary" id="resetMenu">新規入力</button></form></section>
+<section class="panel"><h2>予約カレンダー・顧客検索</h2><div id="operations"></div></section><section class="panel"><h2>予約メニュー設定</h2><p class="muted">RESERVAの参考画面にある8メニューを非公開の下書きとして追加できます。既存メニューは変更しません。料金・詳細・画像を確認してから公開してください。</p><button type="button" class="secondary" id="importResevaMenus">RESERVAの8メニューを下書き登録</button><div id="menuEditor"></div><h3>メニュー追加・編集</h3><form id="menuForm"><input type="hidden" name="id"><label>メニュー名</label><input name="name" required maxlength="100"><label>説明</label><textarea name="description" maxlength="2000"></textarea><div class="row"><div><label>所要時間（分）</label><input name="duration" type="number" min="5" max="600" value="50" required></div><div><label>価格（円）</label><input name="price" type="number" min="0" value="5500" required></div></div><label><input style="width:auto" type="checkbox" name="active" checked> 公開する</label><button>保存</button> <button type="button" class="secondary" id="resetMenu">新規入力</button></form></section>
 <section class="panel"><h2>写真・画像管理</h2>
 <p class="muted">トップ画像1枚、メニューごとに最大20枚。JPEG・PNG・WebP、各5MBまで。</p>
 <form id="mediaUploadForm" enctype="multipart/form-data">
@@ -320,6 +346,7 @@ if(window.refreshSiteExtras)await window.refreshSiteExtras();
 }
 $('refresh').onclick=()=>dashboard().catch(e=>alert(e.message));
 $('logout').onclick=async()=>{await api('logout',{},{});location.reload();};
+$('importResevaMenus').onclick=async()=>{if(!confirm('RESERVAの8メニューを非公開の下書きとして追加します。既存メニューは変更しません。よろしいですか？'))return;const btn=$('importResevaMenus');btn.disabled=true;try{const r=await api('importResevaMenus',{},{});await dashboard();alert(r.added+'件のメニューを追加しました。料金・所要時間・写真を確認して公開してください。');}catch(e){alert(e.message);}finally{btn.disabled=false;}};
 $('resetMenu').onclick=()=>{$('menuForm').reset();$('menuForm').elements.id.value='';};
 $('menuForm').onsubmit=async e=>{e.preventDefault();let d=Object.fromEntries(new FormData(e.target));d.active=e.target.elements.active.checked;try{await api('saveMenu',{},d);$('resetMenu').click();await dashboard();}catch(err){alert(err.message);}};
 $('settingsForm').onsubmit=async e=>{e.preventDefault();try{await api('saveSettings',{},Object.fromEntries(new FormData(e.target)));await dashboard();alert('保存しました');}catch(err){error('settingsError',err);}};

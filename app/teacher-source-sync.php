@@ -110,7 +110,8 @@ function syncMemberFields(DOMXPath $xpath): array {
 }
 function syncMemberPictures(DOMXPath $xpath,string $url): array {
     $candidates=[];
-    foreach($xpath->query('//article//img|//main//img|//*[contains(@class,"entry-content")]//img') as $img){
+    // Older member templates put headshots outside article/main.
+    foreach($xpath->query('//article//img|//main//img|//*[contains(@class,"entry-content")]//img|(//h1/following::img)[position()<=5]') as $img){
         if(!$img instanceof DOMElement)continue;
         $raws=[];
         foreach(['data-src','data-lazy-src','data-original','src'] as $attr){
@@ -130,6 +131,8 @@ function syncMemberPictures(DOMXPath $xpath,string $url): array {
             if(str_contains($src,'/uploads/'))$score+=3;
             if((int)$img->getAttribute('width')>=120)$score+=2;
             if((int)$img->getAttribute('height')>=120)$score+=2;
+            $alt=$img->getAttribute('alt');
+            if($alt!==''&&preg_match('/先生|講師|プロフィール/u',$alt))$score+=4;
             $candidates[$src]=max($score,$candidates[$src]??0);
         }
     }

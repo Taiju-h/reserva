@@ -35,7 +35,7 @@ try {
     $done=0;$profiles=0;$photos=0;$qualificationItems=0;$errors=[];$skipped=0;
     if($missingOnly){
       syncMemberTable();
-      $q=$pdo=db()->query('SELECT t.name, COALESCE(p.career,"") AS career,
+      $q=db()->query('SELECT t.name, COALESCE(p.career,"") AS career,
         COALESCE(p.photo_path,"") AS photo_path,
         (SELECT COUNT(*) FROM teacher_photo_assets a WHERE a.teacher_id=t.id) AS asset_count,
         (SELECT COUNT(*) FROM teacher_qualifications tq WHERE tq.teacher_id=t.id) AS qualifications

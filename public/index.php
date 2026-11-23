@@ -104,12 +104,14 @@ require_once $root.'/app/teacher-profiles.php';
 require_once $root.'/app/teacher-source-sync.php';
 require_once $root.'/app/stripe.php';
 require_once $root.'/app/media.php';
+require_once $root.'/app/favicons.php';
 $action=(string)($_GET['action']??'');
 $method=$_SERVER['REQUEST_METHOD']??'GET';
 try {
     scheduleRoute($action,$method);
     teacherProfileRoute($action,$method);
     syncMemberRoute($action,$method);
+    faviconRoute($action,$method);
     if($action==='media' && $method==='GET') mediaServe();
     if($action==='mediaUpload' && $method==='POST') mediaUpload();
     if($action==='mediaDelete' && $method==='POST') mediaDelete();
@@ -297,7 +299,7 @@ try {
 }catch(Throwable $e){error_log('[reserva] '.$e->getMessage());fail('処理に失敗しました。管理者にお問い合わせください',500);}
 ?><!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>はなキャリ | ハナマルキャリアお仕事相談予約受付</title><link rel="stylesheet" href="/assets/hanacari.css?v=20261123-teacher-retry"><style>
+<title>はなキャリ | ハナマルキャリアお仕事相談予約受付</title><link id="siteFavicon" rel="icon" type="image/svg+xml" href="/?action=favicon&amp;kind=<?=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH)==='/admin'?'admin':'public'?>&amp;v=20261123-1"><link rel="stylesheet" href="/assets/hanacari.css?v=20261123-teacher-retry"><style>
 :root{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#26323e;background:#f6f7f9}*{box-sizing:border-box}body{margin:0}header{background:#fff;border-bottom:1px solid #e5e9ef;padding:19px max(20px,calc((100vw - 1040px)/2));display:flex;align-items:center;justify-content:space-between}header strong{font-size:22px;color:#1e6663}a{color:#1f7771;text-decoration:none}main{max-width:1040px;margin:32px auto;padding:0 16px}.hero{background:linear-gradient(120deg,#f3faf7,#e9f2f8);padding:34px;border-radius:14px;margin-bottom:25px}.hero h1{margin:0 0 8px;font-size:26px}section.panel{background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:24px;margin-bottom:18px;box-shadow:0 2px 12px #22334408}h2{font-size:19px;margin:0 0 18px}label{display:block;font-size:14px;font-weight:600;margin:13px 0 6px}input,select,textarea,button{font:inherit}input,select,textarea{width:100%;border:1px solid #ced6de;border-radius:8px;padding:11px;background:#fff}textarea{min-height:88px}button{border:0;border-radius:8px;padding:12px 18px;background:#257b76;color:white;font-weight:700;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}button.secondary{color:#335;background:#ecf0f2}button.danger{background:#ae5050}.menus{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.menu{border:1px solid #d7e0e3;background:#fff;padding:18px;text-align:left;border-radius:10px;cursor:pointer}.menu.selected{border:2px solid #257b76;background:#f0f9f7}.menu b{display:block;margin-bottom:6px}.menu small{display:block;margin-top:8px;color:#64717d}.times{display:grid;grid-template-columns:repeat(auto-fill,minmax(83px,1fr));gap:8px}.times button{background:#fff;color:#257b76;border:1px solid #91b9b6;padding:10px}.times button.chosen{background:#257b76;color:white}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.muted{color:#687686}.hidden{display:none!important}.notice{background:#eff8f3;padding:16px;border-radius:8px;margin:16px 0}.error{background:#fff0ee;color:#a43626;padding:12px;border-radius:8px;margin:12px 0}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:10px 7px;text-align:left;border-bottom:1px solid #e8edf1}th{background:#f7f9fa}.scroll{overflow:auto}.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}nav{display:flex;gap:15px}footer{text-align:center;color:#71808b;padding:35px}@media(max-width:620px){.row{grid-template-columns:1fr}.hero{padding:22px}section.panel{padding:17px}header{padding:16px}.hero h1{font-size:22px}}
 </style></head><body>
 <header><strong id="brand">はなキャリ <span class="flower-mark">✿</span></strong><span class="header-subtitle">はなキャリ - ハナマルキャリアお仕事相談予約受付</span><nav><a href="/">予約</a><a href="#contact">お問い合わせ</a><a href="/admin">ログイン</a></nav></header>
@@ -400,7 +402,16 @@ try {
 <label>臨時休業日（YYYY-MM-DD、カンマ区切り）</label><input name="closed_dates" placeholder="2026-12-31,2027-01-01">
 <div class="row"><div><label>予約締切（何分前）</label><input type="number" name="lead_minutes" min="0" max="10080" value="60"></div>
 <div><label>何日先まで予約を受け付けるか</label><input type="number" name="max_advance_days" min="1" max="365" value="90"></div></div>
-<p id="settingsError"></p><button>営業時間を保存</button></form></section>
+<p id="settingsError"></p><button>営業時間を保存</button></form>
+<div id="faviconSettings" class="favicon-settings">
+<h3>ブラウザのアイコン（Favicon）</h3>
+<p class="muted">公開サイトと管理画面で別々のアイコンを設定できます。初期状態は公開用がオレンジの花、管理用が濃緑の歯車です。</p>
+<div class="favicon-control-row">
+<div><strong>公開サイト用</strong><div class="favicon-preview"><img id="faviconPreviewPublic" alt="公開サイトFavicon" src="/?action=favicon&amp;kind=public&amp;v=20261123-1"></div><form class="faviconUpload" data-kind="public"><input type="file" name="icon" accept="image/png,image/jpeg,image/webp" required><button type="submit">公開用を登録</button><button type="button" class="secondary faviconReset" data-kind="public">初期アイコンへ戻す</button></form></div>
+<div><strong>管理画面用</strong><div class="favicon-preview"><img id="faviconPreviewAdmin" alt="管理画面Favicon" src="/?action=favicon&amp;kind=admin&amp;v=20261123-1"></div><form class="faviconUpload" data-kind="admin"><input type="file" name="icon" accept="image/png,image/jpeg,image/webp" required><button type="submit">管理用を登録</button><button type="button" class="secondary faviconReset" data-kind="admin">初期アイコンへ戻す</button></form></div>
+</div>
+<p id="faviconMessage" role="status"></p>
+</div></section>
 <section class="panel admin-pane" data-admin-section="users" id="adminUsersPane" hidden>
 <h2>管理者アカウント</h2>
 <p class="muted">マスターのみ追加・停止・パスワード再設定ができます。マスターのパスワードは従来の環境設定で管理します。</p>
@@ -416,6 +427,7 @@ try {
 <script src="/assets/operations.js?v=20261123-explain2" defer></script>
 <script src="/assets/scheduling-admin.js?v=20261123-schedule2" defer></script>
 <script src="/assets/teachers-admin.js?v=20261123-sync2" defer></script>
+<script src="/assets/favicon-admin.js?v=20261123-1" defer></script>
 <script src="/assets/teacher-profiles-admin.js?v=20261123-profile3" defer></script>
 <script src="/assets/site-extras.js" defer></script>
 <script>

@@ -31,8 +31,26 @@ try {
     $migration=migrateTeacherProfileDirectory();
     echo "MIGRATION ".json_encode($migration,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\n";
     $names=require $root.'/app/teacher-directory.php';
-    $done=0;$profiles=0;$photos=0;$qualificationItems=0;$errors=[];
+    $missingOnly=in_array('--missing-only',$argv??[],true);
+    $done=0;$profiles=0;$photos=0;$qualificationItems=0;$errors=[];$skipped=0;
+    if($missingOnly){
+      syncMemberTable();
+      $q=$pdo=db()->query('SELECT t.name, COALESCE(p.career,"") AS career,
+        COALESCE(p.photo_path,"") AS photo_path,
+        (SELECT COUNT(*) FROM teacher_photo_assets a WHERE a.teacher_id=t.id) AS asset_count,
+        (SELECT COUNT(*) FROM teacher_qualifications tq WHERE tq.teacher_id=t.id) AS qualifications
+        FROM teachers t LEFT JOIN teacher_profiles p ON p.teacher_id=t.id');
+      $existing=[];
+      foreach($q->fetchAll() as $r){
+        $existing[syncMemberKey($r['name'])]=$r;
+      }
+    }
     foreach($names as $i=>$name){
+      if($missingOnly){
+        $r=$existing[syncMemberKey($name)]??null;
+        if($r && $r['career']!=='' && ($r['photo_path']!=='' || (int)$r['asset_count']>0)
+          && (int)$r['qualifications']>0){$skipped++;continue;}
+      }
       try {
         $r=syncMemberOne($i);
         $done++;
@@ -55,7 +73,7 @@ try {
     $summaries=(int)$db->query("SELECT COUNT(*) FROM teacher_profiles WHERE COALESCE(summary,'')<>''")->fetchColumn();
     $qualifications=(int)$db->query('SELECT COUNT(*) FROM teacher_qualifications')->fetchColumn();
     echo "FINAL ".json_encode([
-        'teachers_total'=>count($names),'processed'=>$done,
+        'teachers_total'=>count($names),'processed'=>$done,'skipped_complete'=>$skipped,
         'profiles_from_source'=>$profiles,'source_photos_saved'=>$photos,
         'photo_assets_total'=>$stored,'career_records_total'=>$careers,
         'summaries_total'=>$summaries,'qualification_links_total'=>$qualifications,

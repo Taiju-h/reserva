@@ -236,6 +236,9 @@ function syncMemberOne(int $index): array {
       '松岡 真理'=>'4197-2/',
       '金井 優貴'=>'kanai/',
       '手嶋由美子'=>'yumiko-teduk/',
+      '村井 美月'=>'murai/',
+      '吉村千鶴子'=>'%E5%90%89%E6%9D%91%E5%8D%83%E9%B6%B4%E5%AD%90/',
+      '木村亮'=>'%E6%9C%A8%E6%9D%91%E4%BA%AE/',
     ];
     if(isset($paths[$name]))$links[]=$listing.$paths[$name];
     $links=array_values(array_unique($links));

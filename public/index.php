@@ -180,32 +180,32 @@ try {
     require_once $root.'/app/operations.php';
     if($action==='importResevaMenus' && $method==='POST'){
         requireAdmin();checkCsrf();
-        // Eight reference menus; requested uniform price JPY 5,500.
+        // Eight reference menus; specified prices JPY 5,500 / 7,000 / 6,500.
         // Names and known durations come from the supplied RESERVA screenshot.
         $rows=[
-            ['初めての転職コース',40],
-            ['仕事もやもや相談',40],
-            ['学生就活コース',30],
-            ['女性のキャリア相談コース',40],
-            ['独立・経営相談',50],
-            ['上田晶美に相談',50],
-            ['ビジネス英語力チェック',50],
-            ['マネー相談',50] // Duration provisional; confirm with operator.
+            ['初めての転職コース',40,5500],
+            ['仕事もやもや相談',40,5500],
+            ['学生就活コース',30,5500],
+            ['女性のキャリア相談コース',40,5500],
+            ['独立・経営相談',50,5500],
+            ['上田晶美に相談',50,7000],
+            ['ビジネス英語力チェック',50,5500],
+            ['マネー相談',50,6500] // Duration provisional; confirm with operator.
         ];
         $db=db();$db->beginTransaction();$added=0;$updated=0;
         try {
             $exists=$db->prepare('SELECT id FROM menus WHERE name=? LIMIT 1');
-            $create=$db->prepare('INSERT INTO menus(name,description,duration,price,active) VALUES(?,?,?,5500,1)');
-            $enable=$db->prepare('UPDATE menus SET price=5500, active=1 WHERE id=?');
-            foreach($rows as [$name,$minutes]){
+            $create=$db->prepare('INSERT INTO menus(name,description,duration,price,active) VALUES(?,?,?,?,1)');
+            $enable=$db->prepare('UPDATE menus SET price=?, active=1 WHERE id=?');
+            foreach($rows as [$name,$minutes,$price]){
                 $exists->execute([$name]);$id=$exists->fetchColumn();
                 if($id!==false){
                     // Preserve existing descriptions, durations and referenced menu IDs.
-                    $enable->execute([$id]);$updated++;
+                    $enable->execute([$price,$id]);$updated++;
                 }else{
                     $desc=$minutes.'分の個別相談';
                     if($name==='マネー相談')$desc.='（所要時間は仮設定）';
-                    $create->execute([$name,$desc,$minutes]);$added++;
+                    $create->execute([$name,$desc,$minutes,$price]);$added++;
                 }
             }
             $db->commit();
@@ -294,7 +294,7 @@ try {
 <div class="row"><div><label>メール</label><input type="email" name="email" maxlength="254" required></div><div><label>電話番号</label><input name="phone" maxlength="40"></div></div>
 <label>備考</label><textarea name="note" maxlength="1000"></textarea>
 <button type="submit">予約を登録</button><p id="adminBookResult"></p></form></section>
-<section class="panel"><h2>予約カレンダー・顧客検索</h2><div id="operations"></div></section><section class="panel"><h2>予約メニュー設定</h2><p class="muted">RESERVA参考画面の8メニューを一律5,500円で登録・公開します。すでに登録した同名メニューも5,500円・公開に更新します。既存予約は変更しません。マネー相談の時間は仮に50分です。</p><button type="button" class="secondary" id="importResevaMenus">RESERVAの8メニューを5,500円で登録・公開</button><div id="menuEditor"></div><h3>メニュー追加・編集</h3><form id="menuForm"><input type="hidden" name="id"><label>メニュー名</label><input name="name" required maxlength="100"><label>説明</label><textarea name="description" maxlength="2000"></textarea><div class="row"><div><label>所要時間（分）</label><input name="duration" type="number" min="5" max="600" value="50" required></div><div><label>価格（円）</label><input name="price" type="number" min="0" value="5500" required></div></div><label><input style="width:auto" type="checkbox" name="active" checked> 公開する</label><button>保存</button> <button type="button" class="secondary" id="resetMenu">新規入力</button></form></section>
+<section class="panel"><h2>予約カレンダー・顧客検索</h2><div id="operations"></div></section><section class="panel"><h2>予約メニュー設定</h2><p class="muted">RESERVA参考画面の8メニューを登録・公開します。上田晶美に相談は7,000円、マネー相談は6,500円、その他は5,500円です。同名メニューも指定価格に更新します。既存予約は変更しません。マネー相談の時間は仮に50分です。</p><button type="button" class="secondary" id="importResevaMenus">RESERVAの8メニューを指定価格で登録・公開</button><div id="menuEditor"></div><h3>メニュー追加・編集</h3><form id="menuForm"><input type="hidden" name="id"><label>メニュー名</label><input name="name" required maxlength="100"><label>説明</label><textarea name="description" maxlength="2000"></textarea><div class="row"><div><label>所要時間（分）</label><input name="duration" type="number" min="5" max="600" value="50" required></div><div><label>価格（円）</label><input name="price" type="number" min="0" value="5500" required></div></div><label><input style="width:auto" type="checkbox" name="active" checked> 公開する</label><button>保存</button> <button type="button" class="secondary" id="resetMenu">新規入力</button></form></section>
 <section class="panel"><h2>写真・画像管理</h2>
 <p class="muted">トップ画像1枚、メニューごとに最大20枚。JPEG・PNG・WebP、各5MBまで。</p>
 <form id="mediaUploadForm" enctype="multipart/form-data">
@@ -354,7 +354,7 @@ if(window.refreshSiteExtras)await window.refreshSiteExtras();
 }
 $('refresh').onclick=()=>dashboard().catch(e=>alert(e.message));
 $('logout').onclick=async()=>{await api('logout',{},{});location.reload();};
-$('importResevaMenus').onclick=async()=>{if(!confirm('RESERVAの8メニューを5,500円で登録・公開します。同名の既存メニューも価格・公開状態を更新します。よろしいですか？'))return;const btn=$('importResevaMenus');btn.disabled=true;try{const r=await api('importResevaMenus',{},{});await dashboard();alert(r.added+'件を追加、'+r.updated+'件を更新しました。全8メニューを5,500円で公開しました。');}catch(e){alert(e.message);}finally{btn.disabled=false;}};
+$('importResevaMenus').onclick=async()=>{if(!confirm('RESERVAの8メニューを登録・公開し、上田晶美に相談を7,000円、マネー相談を6,500円、その他を5,500円に更新します。よろしいですか？'))return;const btn=$('importResevaMenus');btn.disabled=true;try{const r=await api('importResevaMenus',{},{});await dashboard();alert(r.added+'件を追加、'+r.updated+'件を更新しました。全8メニューの指定価格を反映しました。');}catch(e){alert(e.message);}finally{btn.disabled=false;}};
 $('resetMenu').onclick=()=>{$('menuForm').reset();$('menuForm').elements.id.value='';};
 $('menuForm').onsubmit=async e=>{e.preventDefault();let d=Object.fromEntries(new FormData(e.target));d.active=e.target.elements.active.checked;try{await api('saveMenu',{},d);$('resetMenu').click();await dashboard();}catch(err){alert(err.message);}};
 $('settingsForm').onsubmit=async e=>{e.preventDefault();try{await api('saveSettings',{},Object.fromEntries(new FormData(e.target)));await dashboard();alert('保存しました');}catch(err){error('settingsError',err);}};

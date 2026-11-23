@@ -73,20 +73,25 @@ function availability(int $menuId,string $date): array {
     if(in_array($day->format('w'),$closed,true)) return [];
     $opening=$s['open_time']??'07:00';$closing=$s['close_time']??'22:00';
     if(!preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/',$opening) || !preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/',$closing)) fail('営業時間設定が不正です',500);
+    $teacherId=isset($m['teacher_id'])&&$m['teacher_id']!==null?(int)$m['teacher_id']:null;
+    if($teacherId!==null){$q=db()->prepare('SELECT active FROM teachers WHERE id=?');$q->execute([$teacherId]);if((int)$q->fetchColumn()!==1)return [];}
     $start=new DateTimeImmutable($date.' '.$opening,$tz);$end=new DateTimeImmutable($date.' '.$closing,$tz);
     if($end<=$start) return [];
     $step=max(5,min(120,(int)($s['slot_minutes']??30)));
     $duration=(int)$m['duration'];$now=new DateTimeImmutable('now',$tz);
     stripeDb();
     $rows=db()->prepare('SELECT b.starts_at, b.ends_at FROM bookings b
+        JOIN menus bm ON bm.id=b.menu_id
         LEFT JOIN stripe_payments sp ON sp.booking_id=b.id
         WHERE (b.status IN (\'confirmed\',\'pending_review\') OR (b.status=\'pending_payment\' AND sp.expires_at > ?))
-        AND b.starts_at < ? AND b.ends_at > ?');
-    $rows->execute([(new DateTimeImmutable())->format('Y-m-d H:i:s'),$end->format('Y-m-d H:i:s'),$start->format('Y-m-d H:i:s')]);
+        AND b.starts_at < ? AND b.ends_at > ?
+        AND (? IS NULL OR bm.teacher_id IS NULL OR bm.teacher_id=?)');
+    $rows->execute([(new DateTimeImmutable())->format('Y-m-d H:i:s'),$end->format('Y-m-d H:i:s'),$start->format('Y-m-d H:i:s'),$teacherId,$teacherId]);
     $busy=$rows->fetchAll();$out=[];
     for($t=$start;$t->modify('+'.$duration.' minutes')<=$end;$t=$t->modify('+'.$step.' minutes')){
         if($t<$now->modify('+'.$leadMinutes.' minutes')) continue;
         $tEnd=$t->modify('+'.$duration.' minutes');
+        if(!scheduleAllows($menuId,$teacherId,$date,$t->format('H:i'),$tEnd->format('H:i')))continue;
         $free=true;
         foreach($busy as $b){if($t->format('Y-m-d H:i:s')<$b['ends_at'] && $tEnd->format('Y-m-d H:i:s')>$b['starts_at']){$free=false;break;}}
         if($free) $out[]=$t->format('H:i');
@@ -94,11 +99,13 @@ function availability(int $menuId,string $date): array {
     return $out;
 }
 require_once $root.'/app/admin-users.php';
+require_once $root.'/app/scheduling.php';
 require_once $root.'/app/stripe.php';
 require_once $root.'/app/media.php';
 $action=(string)($_GET['action']??'');
 $method=$_SERVER['REQUEST_METHOD']??'GET';
 try {
+    scheduleRoute($action,$method);
     if($action==='media' && $method==='GET') mediaServe();
     if($action==='mediaUpload' && $method==='POST') mediaUpload();
     if($action==='mediaDelete' && $method==='POST') mediaDelete();
@@ -320,6 +327,7 @@ try {
 <button type="button" class="hana-admin-nav active" data-admin-page="bookings">予約一覧</button>
 <button type="button" class="hana-admin-nav" data-admin-page="manual">手動予約登録</button>
 <button type="button" class="hana-admin-nav" data-admin-page="calendar">予約カレンダー・顧客</button>
+<button type="button" class="hana-admin-nav" data-admin-page="scheduling">受付条件・先生の予定</button>
 <button type="button" class="hana-admin-nav" data-admin-page="menus">予約メニュー設定</button>
 <button type="button" class="hana-admin-nav" data-admin-page="media">写真・画像</button>
 <button type="button" class="hana-admin-nav" data-admin-page="inquiries">問い合わせ・キャンセル待ち</button>
@@ -335,7 +343,12 @@ try {
 <div class="row"><div><label>メール</label><input type="email" name="email" maxlength="254" required></div><div><label>電話番号</label><input name="phone" maxlength="40"></div></div>
 <label>備考</label><textarea name="note" maxlength="1000"></textarea>
 <button type="submit">予約を登録</button><p id="adminBookResult"></p></form></section>
-<section class="panel admin-pane" data-admin-section="calendar"><h2>予約カレンダー・顧客検索</h2><div id="operations"></div></section><section class="panel admin-pane" data-admin-section="menus"><h2>予約メニュー設定</h2><p class="muted">RESERVA参考画面の8メニューを登録・公開します。上田晶美に相談は7,000円、マネー相談は6,500円、その他は5,500円です。同名メニューも指定価格に更新します。既存予約は変更しません。マネー相談の時間は仮に50分です。</p><button type="button" class="secondary" id="importResevaMenus">RESERVAの8メニューを指定価格で登録・公開</button><div id="menuEditor"></div><h3>メニュー追加・編集</h3><form id="menuForm"><input type="hidden" name="id"><label>メニュー名</label><input name="name" required maxlength="100"><label>説明</label><textarea name="description" maxlength="2000"></textarea><div class="row"><div><label>所要時間（分）</label><input name="duration" type="number" min="5" max="600" value="50" required></div><div><label>価格（円）</label><input name="price" type="number" min="0" value="5500" required></div></div><label><input style="width:auto" type="checkbox" name="active" checked> 公開する</label><button>保存</button> <button type="button" class="secondary" id="resetMenu">新規入力</button></form></section>
+<section class="panel admin-pane" data-admin-section="calendar"><h2>予約カレンダー・顧客検索</h2><div id="operations"></div></section><section class="panel admin-pane" data-admin-section="scheduling">
+<h2>受付条件・先生の予定</h2>
+<p class="muted">店舗全体 → 先生 → メニューの順に受付条件を管理します。どこかの階層で「受付禁止」に該当すると予約不可になります。受付許可は、同じ階層の該当日に時間を限定します。</p>
+<div id="schedulingAdmin"></div>
+</section>
+<section class="panel admin-pane" data-admin-section="menus"><h2>予約メニュー設定</h2><p class="muted">RESERVA参考画面の8メニューを登録・公開します。上田晶美に相談は7,000円、マネー相談は6,500円、その他は5,500円です。同名メニューも指定価格に更新します。既存予約は変更しません。マネー相談の時間は仮に50分です。</p><button type="button" class="secondary" id="importResevaMenus">RESERVAの8メニューを指定価格で登録・公開</button><div id="menuEditor"></div><h3>メニュー追加・編集</h3><form id="menuForm"><input type="hidden" name="id"><label>メニュー名</label><input name="name" required maxlength="100"><label>説明</label><textarea name="description" maxlength="2000"></textarea><div class="row"><div><label>所要時間（分）</label><input name="duration" type="number" min="5" max="600" value="50" required></div><div><label>価格（円）</label><input name="price" type="number" min="0" value="5500" required></div></div><label><input style="width:auto" type="checkbox" name="active" checked> 公開する</label><button>保存</button> <button type="button" class="secondary" id="resetMenu">新規入力</button></form></section>
 <section class="panel admin-pane" data-admin-section="media"><h2>写真・画像管理</h2>
 <p class="muted">トップ画像1枚、メニューごとに最大20枚。JPEG・PNG・WebP、各5MBまで。</p>
 <form id="mediaUploadForm" enctype="multipart/form-data">
@@ -363,6 +376,7 @@ try {
 </section></div></div></div></main>
 <footer>Hanamaru Reservation Platform</footer>
 <script src="/assets/operations.js" defer></script>
+<script src="/assets/scheduling-admin.js?v=20261123" defer></script>
 <script src="/assets/site-extras.js" defer></script>
 <script>
 'use strict';
@@ -476,6 +490,7 @@ $('menuEditor').innerHTML=d.menus.map(m=>'<div class="actions" style="padding:9p
 document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{let m=d.menus.find(x=>Number(x.id)===Number(b.dataset.edit));for(let key of ['id','name','description','duration','price'])$('menuForm').elements[key].value=m[key];$('menuForm').elements.active.checked=!!Number(m.active);$('menuForm').scrollIntoView({behavior:'smooth'});});
 for(let key of ['site_name','open_time','close_time','slot_minutes','closed_weekdays','closed_dates','lead_minutes','max_advance_days'])$('settingsForm').elements[key].value=d.settings[key]??'';
 if(window.refreshSiteExtras)await window.refreshSiteExtras();
+if(window.refreshSchedulingAdmin)await window.refreshSchedulingAdmin();
 adminNavigate(currentAdminPage);
 }
 $('refresh').onclick=()=>dashboard().catch(e=>alert(e.message));

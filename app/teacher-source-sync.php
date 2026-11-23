@@ -194,7 +194,10 @@ function syncMemberOne(int $index): array {
     if(!$id)throw new RuntimeException('先生が未登録です: '.$name);
     syncMemberTable();
     $listing='https://hanamaru-souken.com/member_list/';
-    $html=syncMemberFetch($listing,4000000);
+    // Reuse archive HTML within one CLI process; separate browser requests fetch anew.
+    static $cachedListing=null;
+    if($cachedListing===null)$cachedListing=syncMemberFetch($listing,4000000);
+    $html=$cachedListing;
     if(!$html)throw new RuntimeException('掲載元の講師一覧に接続できません');
     $links=[];
     $page=syncMemberDom($html);

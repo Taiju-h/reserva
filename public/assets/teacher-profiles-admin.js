@@ -68,6 +68,9 @@
      host.innerHTML='<div class="hana-profile-header"><div>'+photo+'</div><div><h3>'+safe(t.name)+'</h3>'+
        '<p class="muted">元サイト：'+(t.source_url?'<a href="'+safe(t.source_url)+'" target="_blank" rel="noopener noreferrer">掲載元を開く</a>':'不明')+'</p>'+
        '<p class="muted">最終取得：'+safe(t.source_checked_at||'未取得')+'</p></div></div>'+
+       '<form id="teacherPhotoForm" class="hana-inline-form"><input type="hidden" name="teacher_id" value="'+Number(t.id)+'">'+
+       '<label>先生の写真を登録・変更（JPEG・PNG・WebP、5MB以下）<input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></label>'+
+       '<button type="submit">写真を保存</button></form><p id="teacherPhotoResult" role="status"></p>'+
        '<form id="teacherProfileForm"><input type="hidden" name="teacher_id" value="'+Number(t.id)+'">'+
        fieldsHtml+'<button type="submit">プロフィールを保存</button><p id="teacherProfileResult"></p></form>'+
        '<h3>先生の資格（資格マスターとの紐付け）</h3><div id="linkedTeacherQualifications">'+
@@ -76,6 +79,23 @@
        '<div class="hana-qualification-link"><select id="qualificationSelect">'+
        '<option value="">資格を選択</option>'+master.map(q=>'<option value="'+Number(q.id)+'">'+safe(q.name)+'</option>').join('')+
        '</select><button type="button" id="qualificationAdd">資格を紐付け</button></div>';
+     get('teacherPhotoForm').onsubmit=async e=>{
+       e.preventDefault();
+       const form=e.target;const button=form.querySelector('button');button.disabled=true;
+       try{
+         const response=await fetch('/?action=teacherPhotoUpload',{
+           method:'POST',credentials:'same-origin',
+           headers:{'X-CSRF-Token':csrfToken},
+           body:new FormData(form)
+         });
+         const result=await response.json();
+         if(!response.ok)throw Error(result.error||'写真の登録に失敗しました');
+         get('teacherPhotoResult').textContent='写真を登録しました。';
+         await showProfile(selectedTeacher);
+         if(window.refreshTeacherDirectory)await window.refreshTeacherDirectory();
+       }catch(err){get('teacherPhotoResult').textContent=err.message;}
+       finally{button.disabled=false;}
+     };
      get('teacherProfileForm').onsubmit=async e=>{
        e.preventDefault();
        try{await api('teacherProfileSave',{},Object.fromEntries(new FormData(e.target)));

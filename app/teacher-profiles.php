@@ -2,6 +2,12 @@
 declare(strict_types=1);
 // Teacher profile and qualification master APIs; all require administrator login.
 function teacherProfileRoute(string $action,string $method): void {
+  if($action==='migrateTeacherProfiles' && $method==='POST'){
+    requireMasterAdmin();checkCsrf();
+    require_once __DIR__.'/teacher-profile-migration.php';
+    $result=migrateTeacherProfileDirectory();
+    jsonOut(['ok'=>true,'migration'=>$result]);
+  }
   if($action==='teacherPhotoUpload' && $method==='POST'){
     requireAdmin();checkCsrf();
     global $root;

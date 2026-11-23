@@ -140,6 +140,36 @@ function syncMemberPictures(DOMXPath $xpath,string $url): array {
     arsort($candidates);
     return array_keys($candidates);
 }
+function syncMemberArchivePortrait(DOMXPath $xpath,string $name,string $listingUrl): array {
+    $expected=syncMemberKey($name);
+    foreach($xpath->query('//h2|//h3|//h4') as $heading){
+        if(syncMemberKey(syncMemberText($heading))!==$expected)continue;
+        // Find the smallest card with a single member heading and a single uploaded picture.
+        $parent=$heading->parentNode;
+        for($level=0;$level<3 && $parent instanceof DOMElement;$level++,$parent=$parent->parentNode){
+            $headings=$xpath->query('.//h2|.//h3|.//h4',$parent);
+            $matched=0;$other=0;
+            foreach($headings as $h){
+                if(syncMemberKey(syncMemberText($h))===$expected)$matched++;
+                elseif(mb_strlen(syncMemberText($h))<=40)$other++;
+            }
+            if($matched!==1||$other>0)continue;
+            $photos=[];
+            foreach($xpath->query('.//img',$parent) as $img){
+                $url=syncMemberUrl(
+                    $img->getAttribute('data-src')?:$img->getAttribute('data-lazy-src')?:$img->getAttribute('src'),
+                    $listingUrl
+                );
+                if(!$url||!preg_match('~\.(?:jpg|jpeg|png|webp)(?:\?|$)~i',$url)||
+                   preg_match('~logo|icon|banner|placeholder|sprite|noimage|favicon~i',$url))continue;
+                $photos[$url]=true;
+            }
+            // Multiple possible portraits: refuse to guess which one belongs to the person.
+            if(count($photos)===1)return array_keys($photos);
+        }
+    }
+    return [];
+}
 function syncMemberQualifications(string $raw): array {
     $out=[];
     foreach(preg_split('/\n+|[、，,](?=\s*[^、，,]{4,})/u',$raw) as $row){
@@ -218,7 +248,33 @@ function syncMemberOne(int $index): array {
         if(!$title||syncMemberKey(syncMemberText($title))!==syncMemberKey($name))continue;
         $detail=$xpath;$sourceUrl=$url;break;
     }
-    if(!$detail)return ['name'=>$name,'ok'=>false,'status'=>'個別ページを特定できません','career'=>false,'photo'=>false,'qualifications'=>0];
+    if(!$detail){
+        // Keep the summary/qualification data migrated from the verified directory.
+        // A source portrait may still be available in that instructor's dedicated card.
+        $pictureUrls=syncMemberArchivePortrait($page,$name,$listing);
+        $photoSaved=false;$photoReason='一覧の本人枠に写真が確認できません';
+        foreach($pictureUrls as $photoUrl){
+            $bytes=syncMemberFetch($photoUrl,4000000);
+            if(!$bytes){$photoReason='一覧写真の取得に失敗';continue;}
+            $mime=(new finfo(FILEINFO_MIME_TYPE))->buffer($bytes);
+            if(!in_array($mime,['image/jpeg','image/png','image/webp'],true)){$photoReason='取得した画像の形式を確認できません';continue;}
+            $photo=db()->prepare('INSERT INTO teacher_photo_assets(teacher_id,mime,image_bytes,original_url)
+                VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE
+                mime=VALUES(mime),image_bytes=VALUES(image_bytes),original_url=VALUES(original_url),imported_at=NOW()');
+            $photo->bindValue(1,$id,PDO::PARAM_INT);$photo->bindValue(2,$mime);
+            $photo->bindValue(3,$bytes,PDO::PARAM_LOB);$photo->bindValue(4,$photoUrl);
+            $photo->execute();
+            $q=db()->prepare('INSERT INTO teacher_profiles(teacher_id,photo_path,photo_source_url)
+                VALUES(?,?,?) ON DUPLICATE KEY UPDATE
+                photo_path=IF(COALESCE(photo_path,"")="",VALUES(photo_path),photo_path),
+                photo_source_url=IF(COALESCE(photo_source_url,"")="",VALUES(photo_source_url),photo_source_url)');
+            $q->execute([$id,'/?action=teacherPhoto&id='.$id,$photoUrl]);
+            $photoSaved=true;$photoReason='一覧の本人写真から取得';
+            break;
+        }
+        return ['name'=>$name,'ok'=>false,'status'=>'詳細ページ未確認。概要・資格は名簿から補完済み',
+            'career'=>false,'photo'=>$photoSaved,'photo_status'=>$photoReason,'qualifications'=>0];
+    }
     $fields=syncMemberFields($detail);
     $present=0;
     foreach($fields as $value)if($value!=='')$present++;

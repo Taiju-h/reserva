@@ -515,18 +515,26 @@ function adminNavigate(page){
         el.setAttribute('aria-current',selected?'page':'false');
     });
 }
-document.querySelectorAll('#dashboard [data-admin-page]').forEach(el=>el.addEventListener('click',()=>{adminNavigate(el.dataset.adminPage);if(el.dataset.adminPage==='users')refreshAdminUsers().catch(e=>alert(e.message));}));
+document.querySelectorAll('#dashboard [data-admin-page]').forEach(el=>el.addEventListener('click',()=>{
+    const page=el.dataset.adminPage;
+    adminNavigate(page);
+    if(page==='users')refreshAdminUsers().catch(e=>alert(e.message));
+    if(page==='teachers' && window.refreshTeacherDirectory)window.refreshTeacherDirectory().catch(e=>error('teacherDirectoryResult',e));
+    if(page==='qualifications' && window.refreshTeacherQualifications)window.refreshTeacherQualifications().catch(e=>{const x=$('qualificationMasterArea');if(x)x.textContent='資格マスターを取得できません：'+e.message;});
+    if(page==='scheduling' && window.refreshSchedulingAdmin)window.refreshSchedulingAdmin().catch(e=>alert(e.message));
+}));
 async function dashboard(){const d=await api('adminData');$('loginPanel').classList.add('hidden');$('dashboard').classList.remove('hidden');$('adminUsersNav').hidden=!d.master;$('adminUsersPane').dataset.master=d.master?'yes':'no';
 $('bookings').innerHTML=d.bookings.map(b=>'<tr><td>'+b.id+'</td><td>'+esc(b.starts_at)+'</td><td>'+esc(b.menu_name)+'</td><td>'+esc(b.customer_name)+'</td><td>'+esc(b.email)+'<br>'+esc(b.phone)+'</td><td>'+esc(b.status==='pending_review'?'申込み・確認待ち':b.status)+'</td><td><button class="secondary" data-book="'+b.id+'" data-status="'+(b.status==='confirmed'?'cancelled':'confirmed')+'">'+(b.status==='confirmed'?'取消':b.status==='pending_review'?'申込みを確定':'復帰')+'</button></td></tr>').join('');
 document.querySelectorAll('[data-book]').forEach(b=>b.onclick=async()=>{if(!confirm(b.dataset.status==='confirmed'?'予約を確定しますか？ 料金は当日現地払いです。':'この予約を取り消しますか？'))return;try{await api('setStatus',{}, {id:Number(b.dataset.book),status:b.dataset.status});await dashboard();}catch(e){alert(e.message);}});
 $('menuEditor').innerHTML=d.menus.map(m=>'<div class="actions" style="padding:9px;border-bottom:1px solid #eee"><b>'+esc(m.name)+'</b><span>'+m.duration+'分 / '+Number(m.price).toLocaleString()+'円 / '+(m.active?'公開':'非公開')+'</span><button class="secondary" data-edit="'+m.id+'">編集</button></div>').join('');
 document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{let m=d.menus.find(x=>Number(x.id)===Number(b.dataset.edit));for(let key of ['id','name','description','duration','price'])$('menuForm').elements[key].value=m[key];$('menuForm').elements.active.checked=!!Number(m.active);$('menuForm').scrollIntoView({behavior:'smooth'});});
 for(let key of ['site_name','open_time','close_time','slot_minutes','closed_weekdays','closed_dates','lead_minutes','max_advance_days'])$('settingsForm').elements[key].value=d.settings[key]??'';
-if(window.refreshSiteExtras)await window.refreshSiteExtras();
-if(window.refreshSchedulingAdmin)await window.refreshSchedulingAdmin();
-if(window.refreshTeacherDirectory)await window.refreshTeacherDirectory();
-if(window.refreshTeacherQualifications)await window.refreshTeacherQualifications();
 adminNavigate(currentAdminPage);
+// Optional sections load independently; a missing profile table cannot hide the teacher list.
+if(currentAdminPage==='teachers' && window.refreshTeacherDirectory)await window.refreshTeacherDirectory();
+if(currentAdminPage==='qualifications' && window.refreshTeacherQualifications)await window.refreshTeacherQualifications().catch(e=>{const x=$('qualificationMasterArea');if(x)x.textContent='資格マスターを取得できません：'+e.message;});
+if(currentAdminPage==='scheduling' && window.refreshSchedulingAdmin)await window.refreshSchedulingAdmin();
+if(window.refreshSiteExtras)await window.refreshSiteExtras();
 }
 $('refresh').onclick=()=>dashboard().catch(e=>alert(e.message));
 async function refreshAdminUsers(){

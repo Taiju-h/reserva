@@ -91,7 +91,7 @@ function corporateRoute(string $action,string $method): void {
            strlen($email)>254||strlen($phone)>40||mb_strlen($ref)>80)fail('お客様情報を確認してください');
         if(empty($v['consent']))fail('個人情報の利用目的への同意が必要です');
         $slotId=(int)($v['slot_id']??0);$teacher=(int)($v['teacher_id']??0);
-        $pdo=db();$pdo->beginTransaction();
+        $pdo=db();bookingLock($pdo);$pdo->beginTransaction();
         try{
             $q=$pdo->prepare('SELECT s.id,s.teacher_id,s.starts_at,s.ends_at,s.booked_id
               FROM corporate_slots s JOIN corporate_teachers ct
@@ -125,8 +125,9 @@ function corporateRoute(string $action,string $method): void {
             $id=(int)$pdo->lastInsertId();
             $pdo->prepare('UPDATE corporate_slots SET booked_id=? WHERE id=? AND booked_id IS NULL')->execute([$id,$slotId]);
             $pdo->commit();$_SESSION['last_corporate_booking_at']=time();
+            bookingUnlock($pdo);
             jsonOut(['ok'=>true,'booking_id'=>$id,'date'=>$date,'time'=>$time]);
-        }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+        }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();bookingUnlock($pdo);throw $e;}
     }
     if($action==='corporateAdmin' && $method==='GET'){
         requireAdmin();$campaign=corporateCampaign();

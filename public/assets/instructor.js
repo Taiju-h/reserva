@@ -3,6 +3,54 @@
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let csrf='';
+let monthCursor='2026-12';
+let currentSlots=[];
+function jpToday(){
+ return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+}
+function renderCalendar(){
+ const monthEl=$('teacherCalendarMonth'),grid=$('teacherCalendarGrid');
+ if(!monthEl||!grid)return;
+ const [y,m]=monthCursor.split('-').map(Number);
+ const first=new Date(Date.UTC(y,m-1,1,12));
+ const days=new Date(Date.UTC(y,m,0,12)).getUTCDate();
+ const offset=first.getUTCDay();
+ monthEl.textContent=y+'年'+m+'月';
+ let html=['日','月','火','水','木','金','土'].map(x=>'<div class="teacher-day-head">'+x+'</div>').join('');
+ for(let i=0;i<offset;i++)html+='<div aria-hidden="true"></div>';
+ const today=jpToday();
+ const selected=$('teacherSlotForm')?.elements.date?.value||'';
+ for(let n=1;n<=days;n++){
+   const date=monthCursor+'-'+String(n).padStart(2,'0');
+   const booked=currentSlots.filter(x=>x.starts_at.startsWith(date)&&x.state!=='空き').length;
+   const open=currentSlots.filter(x=>x.starts_at.startsWith(date)&&x.state==='空き').length;
+   const disabled=date<'2026-12-20'||date>'2027-02-28'||date<'2026-12-28'&&date<today||
+      date>='2026-12-28'&&date<='2027-01-03'||date<today;
+   html+='<button type="button" class="teacher-cal-day'+(date===selected?' selected':'')+'" data-day="'+date+'"'+(disabled?' disabled':'')+'>'+
+     '<strong>'+n+'</strong><span>空き '+open+(booked?' / 予約 '+booked:'')+'</span></button>';
+ }
+ grid.innerHTML=html;
+ grid.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{
+   $('teacherSlotForm').elements.date.value=b.dataset.day;
+   renderCalendar();
+ });
+ const min='2026-12',max='2027-02';
+ $('teacherCalendarPrev').disabled=monthCursor<=min;
+ $('teacherCalendarNext').disabled=monthCursor>=max;
+}
+function moveMonth(by){
+ const [y,m]=monthCursor.split('-').map(Number);
+ const next=new Date(Date.UTC(y,m-1+by,1,12));
+ monthCursor=next.getUTCFullYear()+'-'+String(next.getUTCMonth()+1).padStart(2,'0');
+ renderCalendar();
+}
+$('teacherCalendarPrev').onclick=()=>moveMonth(-1);
+$('teacherCalendarNext').onclick=()=>moveMonth(1);
+$('teacherSlotForm').elements.date.addEventListener('change',e=>{
+ if(e.target.value)monthCursor=e.target.value.slice(0,7);
+ renderCalendar();
+});
+
 async function api(action,data=null){
  const options=data===null?{credentials:'same-origin'}:{method:'POST',credentials:'same-origin',
    headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(data)};
@@ -18,6 +66,9 @@ async function refresh(){
  const form=$('teacherSlotForm');form.querySelector('button').disabled=!data.assigned;
  if(!data.assigned)$('teacherSlotStatus').textContent='企業案件の担当講師に登録されていません。管理者にご確認ください。';
  const slots=data.slots||[];
+ currentSlots=slots;
+ if(!monthCursor || monthCursor<'2026-12' || monthCursor>'2027-02')monthCursor='2026-12';
+ renderCalendar();
  $('teacherSlots').innerHTML=slots.length?'<div class="slot-table"><table><thead><tr><th>日時</th><th>状態</th><th>操作</th></tr></thead><tbody>'+
  slots.map(s=>'<tr><td>'+esc(s.starts_at.slice(0,16))+'</td><td>'+esc(s.state)+'</td><td>'+
  (s.state==='空き'?'<button type="button" class="secondary" data-delete="'+Number(s.id)+'">削除</button>':'予約済みのため変更不可')+

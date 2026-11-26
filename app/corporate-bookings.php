@@ -33,9 +33,17 @@ function corporateAvailability(int $campaignId,int $teacherId,string $date): arr
     if(!dateValid($date)||$date<'2026-12-20'||$date>'2027-02-28')return [];
     if($date>='2026-12-28'&&$date<='2027-01-03')return [];
     $now=(new DateTimeImmutable('now',new DateTimeZone('Asia/Tokyo')))->format('Y-m-d H:i:s');
-    $q=db()->prepare('SELECT id,DATE_FORMAT(starts_at,"%H:%i") AS time
-      FROM corporate_slots WHERE campaign_id=? AND teacher_id=? AND DATE(starts_at)=?
-      AND starts_at>? AND booked_id IS NULL ORDER BY starts_at');
+    $q=db()->prepare('SELECT s.id,DATE_FORMAT(s.starts_at,"%H:%i") AS time
+      FROM corporate_slots s WHERE s.campaign_id=? AND s.teacher_id=? AND DATE(s.starts_at)=?
+      AND s.starts_at>? AND s.booked_id IS NULL
+      AND NOT EXISTS (
+         SELECT 1 FROM bookings b JOIN menus m ON m.id=b.menu_id
+         LEFT JOIN stripe_payments sp ON sp.booking_id=b.id
+         WHERE m.teacher_id=s.teacher_id AND
+           (b.status IN ("confirmed","pending_review") OR
+             (b.status="pending_payment" AND sp.expires_at>NOW()))
+           AND b.starts_at<s.ends_at AND b.ends_at>s.starts_at
+       ) ORDER BY s.starts_at');
     $q->execute([$campaignId,$teacherId,$date,$now]);
     return array_values(array_filter($q->fetchAll(PDO::FETCH_ASSOC),
       static fn($r)=>corporateTimeAllowed($date,$r['time'])));
@@ -97,6 +105,15 @@ function corporateRoute(string $action,string $method): void {
                (strtotime($slot['ends_at'])-strtotime($slot['starts_at']))!==3600){
                 $pdo->rollBack();fail('この時間は受付できません',409);
             }
+            // The same instructor may also be assigned to general paid consultations.
+            $conflict=$pdo->prepare('SELECT COUNT(*) FROM bookings b JOIN menus m ON m.id=b.menu_id
+              LEFT JOIN stripe_payments sp ON sp.booking_id=b.id
+              WHERE m.teacher_id=? AND
+                (b.status IN ("confirmed","pending_review") OR
+                 (b.status="pending_payment" AND sp.expires_at>NOW()))
+                AND b.starts_at<? AND b.ends_at>?');
+            $conflict->execute([$teacher,$slot['ends_at'],$slot['starts_at']]);
+            if((int)$conflict->fetchColumn()>0){$pdo->rollBack();fail('先生の別の予約と重複しています',409);}
             $q=$pdo->prepare('SELECT COUNT(*) FROM corporate_bookings WHERE campaign_id=?
                  AND customer_email=? AND status IN ("confirmed","completed")');
             $q->execute([$campaign['id'],$email]);

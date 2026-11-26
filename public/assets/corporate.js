@@ -2,7 +2,7 @@
 (()=>{
 const $=id=>document.getElementById(id);
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const state={user:null,teachers:[],teacher:null,slot:null,csrf:''};
+const state={user:null,teachers:[],teacher:null,slot:null,csrf:'',requireEmailVerification:false};
 async function request(action,payload){
   const response=await fetch('/?action='+encodeURIComponent(action),{
     method:'POST',credentials:'same-origin',
@@ -19,6 +19,7 @@ function show(page){
     $('step'+i+'label').classList.toggle('active',page===i);
   }
   $('complete').hidden=page!=='complete';
+  $('emailVerification').hidden=page!=='verify';
 }
 async function start(){
   try{
@@ -26,6 +27,10 @@ async function start(){
     const data=await response.json();
     if(!response.ok)throw Error(data.error||'設定を読み込めません');
     state.csrf=data.csrf;
+    const policyResponse=await fetch('/?action=corporateEmailPolicy',{credentials:'same-origin'});
+    if(!policyResponse.ok)throw Error('メール確認設定を取得できません');
+    const policy=await policyResponse.json();
+    state.requireEmailVerification=Boolean(policy.verification_required);
   }catch(e){$('identityError').textContent=e.message;$('identity').querySelector('button').disabled=true;}
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   $('consultDate').min=today>'2026-12-20'?today:'2026-12-20';
@@ -39,8 +44,22 @@ $('identity').addEventListener('submit',async event=>{
   button.disabled=true;$('identityError').textContent='';
   try{
     const user=Object.fromEntries(new FormData(form));
-    const result=await request('corporateAccess',user);
-    state.user=user;state.teachers=result.teachers||[];
+    state.user=user;
+    if(state.requireEmailVerification){
+      await request('corporateEmailSendCode',user);
+      $('verificationDestination').textContent='送信先：'+user.email;
+      $('verificationForm').reset();
+      $('verificationError').textContent='';
+      show('verify');
+    }else{
+      await finishIdentity();
+    }
+  }catch(e){$('identityError').textContent=e.message;}
+  finally{button.disabled=false;}
+});
+async function finishIdentity(){
+    const result=await request('corporateAccess',state.user);
+    state.teachers=result.teachers||[];
     if(!state.teachers.length)throw Error('現在公開されている先生がいません。事務局へご確認ください');
     $('teacherCards').innerHTML=state.teachers.map(t=>'<article class="teacher">'+
        (t.photo_url?'<img src="'+escapeHtml(t.photo_url)+'" alt="'+escapeHtml(t.name)+'先生の写真" loading="lazy">':'<div class="no-photo">写真準備中</div>')+
@@ -53,9 +72,19 @@ $('identity').addEventListener('submit',async event=>{
       show(3);loadSlots();
     }));
     show(2);
-  }catch(e){$('identityError').textContent=e.message;}
+}
+$('verificationForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const button=e.currentTarget.querySelector('button');
+  button.disabled=true;
+  $('verificationError').textContent='';
+  try{
+    await request('corporateEmailVerifyCode',{code:new FormData(e.currentTarget).get('code')});
+    await finishIdentity();
+  }catch(err){$('verificationError').textContent=err.message;}
   finally{button.disabled=false;}
 });
+$('verificationBack').addEventListener('click',()=>show(1));
 async function loadSlots(){
   state.slot=null;$('confirmBooking').disabled=true;$('chosenSlot').hidden=true;
   $('bookingMessage').textContent='';

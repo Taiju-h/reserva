@@ -4,7 +4,7 @@ declare(strict_types=1);
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>先生専用・予約枠登録 | はなキャリ</title>
 <link rel="icon" href="/?action=favicon&amp;kind=admin">
-<link rel="stylesheet" href="/assets/corporate.css?v=20261126">
+<link rel="stylesheet" href="/assets/corporate.css?v=20261126-calendar3">
 </head><body>
 <header><a class="brand" href="/">はなキャリ</a><span>先生専用・予約枠登録</span></header>
 <main>

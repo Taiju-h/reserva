@@ -46,6 +46,7 @@ function stripeApi(string $endpoint,array $params,string $idempotency): array {
     }
     return $json;
 }
+final class StripeBookingConflict extends RuntimeException {}
 function stripeRequestBooking(): never {
     if(!stripeEnabled()) fail('カード決済が未設定です',503);
     checkCsrf();$v=body();
@@ -59,12 +60,12 @@ function stripeRequestBooking(): never {
     $db=stripeDb();bookingLock($db);$db->beginTransaction();
     try{
         if(!in_array($time,availability($menuId,$date),true)) {
-            $db->rollBack();fail('希望日時は予約できません',409);
+            throw new StripeBookingConflict('希望日時は予約できません',409);
         }
         $q=$db->prepare('SELECT name,price,duration FROM menus WHERE id=? AND active=1');
         $q->execute([$menuId]);$menu=$q->fetch();
         if(!$menu || (int)$menu['price']<50 || (int)$menu['price']>10000000) {
-            $db->rollBack();fail('決済に対応していないメニューです');
+            throw new StripeBookingConflict('決済に対応していないメニューです',400);
         }
         $from=new DateTimeImmutable($date.' '.$time);
         $to=$from->modify('+'.(int)$menu['duration'].' minutes');
@@ -76,6 +77,9 @@ function stripeRequestBooking(): never {
         $db->prepare('INSERT INTO stripe_payments (booking_id,amount_jpy,expires_at) VALUES(?,?,?)')
             ->execute([$bookingId,(int)$menu['price'],$expiry]);
         $db->commit();
+    }catch(StripeBookingConflict $e){
+        if($db->inTransaction())$db->rollBack();
+        fail($e->getMessage(),$e->getCode());
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
     finally {bookingUnlock($db);}
     try {

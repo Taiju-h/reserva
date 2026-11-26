@@ -22,6 +22,18 @@ declare(strict_types=1);
 <form id="teacherSlotForm"><label>日付<input type="date" name="date" min="2026-12-20" max="2027-02-28" required></label>
 <label>開始時間<select name="time" required><option value="">選択してください</option><option value="08:00">08:00</option><option value="09:00">09:00</option><option value="10:00">10:00</option><option value="11:00">11:00</option><option value="12:00">12:00</option><option value="13:00">13:00</option><option value="14:00">14:00</option><option value="15:00">15:00</option><option value="16:00">16:00</option><option value="17:00">17:00</option><option value="18:00">18:00</option><option value="19:00">19:00</option></select></label>
 <button type="submit">この60分枠を追加</button><p id="teacherSlotStatus" role="status"></p></form>
+<h3>曜日と時間を指定してまとめて登録</h3>
+<form id="teacherBatchForm">
+<label>期間の開始日<input type="date" name="from" min="2026-12-20" max="2027-02-28" value="2026-12-20" required></label>
+<label>期間の終了日<input type="date" name="until" min="2026-12-20" max="2027-02-28" value="2027-02-28" required></label>
+<fieldset><legend>受付する曜日</legend><div class="teacher-checkboxes">
+<label><input type="checkbox" name="days" value="1"> 月</label><label><input type="checkbox" name="days" value="2"> 火</label><label><input type="checkbox" name="days" value="3"> 水</label><label><input type="checkbox" name="days" value="4"> 木</label><label><input type="checkbox" name="days" value="5"> 金</label><label><input type="checkbox" name="days" value="6"> 土</label><label><input type="checkbox" name="days" value="0"> 日</label>
+</div></fieldset>
+<fieldset><legend>受付する開始時間</legend><div class="teacher-checkboxes">
+<label><input type="checkbox" name="hours" value="8"> 08:00</label><label><input type="checkbox" name="hours" value="9"> 09:00</label><label><input type="checkbox" name="hours" value="10"> 10:00</label><label><input type="checkbox" name="hours" value="11"> 11:00</label><label><input type="checkbox" name="hours" value="12"> 12:00</label><label><input type="checkbox" name="hours" value="13"> 13:00</label><label><input type="checkbox" name="hours" value="14"> 14:00</label><label><input type="checkbox" name="hours" value="15"> 15:00</label><label><input type="checkbox" name="hours" value="16"> 16:00</label><label><input type="checkbox" name="hours" value="17"> 17:00</label><label><input type="checkbox" name="hours" value="18"> 18:00</label><label><input type="checkbox" name="hours" value="19"> 19:00</label>
+</div></fieldset>
+<button type="submit">該当する空き枠を一括登録</button><p id="teacherBatchStatus" role="status"></p>
+</form>
 <h3>登録済みの枠</h3><p class="hint">「空き」の枠だけ取消できます。</p><div id="teacherSlots">読み込み中…</div>
 </section>
 </main><script src="/assets/instructor.js?v=20261126-1" defer></script></body></html>

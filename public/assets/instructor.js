@@ -42,6 +42,18 @@ $('teacherSlotForm').onsubmit=async e=>{
  catch(err){$('teacherSlotStatus').textContent=err.message;}
  finally{button.disabled=false;}
 };
+$('teacherBatchForm').onsubmit=async e=>{
+ e.preventDefault();const form=e.target;
+ const button=form.querySelector('button[type=submit]');button.disabled=true;
+ const status=$('teacherBatchStatus');status.textContent='';
+ const v=Object.fromEntries(new FormData(form));
+ v.days=[...form.querySelectorAll('input[name=days]:checked')].map(x=>Number(x.value));
+ v.hours=[...form.querySelectorAll('input[name=hours]:checked')].map(x=>Number(x.value));
+ if(!v.days.length||!v.hours.length){status.textContent='曜日と開始時間を選択してください';button.disabled=false;return;}
+ try{const r=await api('instructorSlotBatch',v);await refresh();status.textContent='新しく'+r.created+'件の空き枠を登録しました。';}
+ catch(err){status.textContent=err.message;}
+ finally{button.disabled=false;}
+};
 $('teacherLogout').onclick=async()=>{await api('instructorLogout',{});location.reload();};
 (async()=>{
  try{const config=await api('config');csrf=config.csrf;await refresh();}

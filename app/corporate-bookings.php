@@ -195,6 +195,11 @@ function corporateRoute(string $action,string $method): void {
         if(!$campaign)fail('先に案件と講師を登録してください');
         $publish=!empty($v['published'])?1:0;
         if($publish){
+          // Personal data intake must not be enabled before TLS and privacy review.
+          if(setting('CORPORATE_TLS_APPROVED')!=='yes')
+              fail('公開できません。SSL警告を解消してからサーバー設定でCORPORATE_TLS_APPROVED=yesを設定してください',409);
+          if(setting('CORPORATE_PRIVACY_APPROVED')!=='yes')
+              fail('公開できません。個人情報の利用目的・保存期間・アクセス権限を確認し、CORPORATE_PRIVACY_APPROVED=yesを設定してください',409);
           $q=db()->prepare('SELECT COUNT(*) FROM corporate_teachers WHERE campaign_id=? AND enabled=1');
           $q->execute([$campaign['id']]);if((int)$q->fetchColumn()!==10)fail('講師10名を登録してから公開してください');
           $q=db()->prepare('SELECT COUNT(*) FROM corporate_slots WHERE campaign_id=?');

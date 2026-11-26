@@ -39,7 +39,7 @@ $('identity').addEventListener('submit',async event=>{
   button.disabled=true;$('identityError').textContent='';
   try{
     const user=Object.fromEntries(new FormData(form));
-    const result=await request('corporateAccess',{access_code:user.access_code});
+    const result=await request('corporateAccess',user);
     state.user=user;state.teachers=result.teachers||[];
     if(!state.teachers.length)throw Error('現在公開されている先生がいません。事務局へご確認ください');
     $('teacherCards').innerHTML=state.teachers.map(t=>'<article class="teacher">'+

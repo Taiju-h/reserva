@@ -23,6 +23,8 @@ jobs:
         run: |
           php -v
           find app ops public -type f -name '*.php' -print0 | xargs -0 -n 1 php -l
+      - name: Corporate schedule regression tests
+        run: php tests/corporate-policy-test.php
       - name: JavaScript syntax
         run: |
           node -v

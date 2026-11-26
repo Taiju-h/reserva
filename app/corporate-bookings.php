@@ -230,6 +230,45 @@ function corporateRoute(string $action,string $method): void {
             fail($e->getMessage(),409);
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();bookingUnlock($pdo);throw $e;}
     }
+    if($action==='corporateInvoiceCsv' && $method==='GET'){
+        requireAdmin();
+        $campaign=corporateCampaign();
+        if(!$campaign)fail('企業案件は未設定です',404);
+        $month=trim((string)($_GET['month']??''));
+        if($month!=='' && !preg_match('/^20\d{2}-(?:0[1-9]|1[0-2])$/D',$month))
+            fail('請求対象月はYYYY-MM形式で指定してください');
+        $sql='SELECT b.id AS booking_id,s.starts_at,t.name AS teacher_name
+            FROM corporate_bookings b
+            JOIN corporate_slots s ON s.id=b.slot_id
+            JOIN teachers t ON t.id=b.teacher_id
+            WHERE b.campaign_id=? AND b.status="completed"';
+        $args=[(int)$campaign['id']];
+        if($month!==''){
+            $sql.=' AND s.starts_at>=? AND s.starts_at<?';
+            $begin=new DateTimeImmutable($month.'-01');
+            $args[]=$begin->format('Y-m-d H:i:s');
+            $args[]=$begin->modify('+1 month')->format('Y-m-d H:i:s');
+        }
+        $sql.=' ORDER BY s.starts_at,b.id';
+        $q=db()->prepare($sql);$q->execute($args);
+        $items=$q->fetchAll(PDO::FETCH_ASSOC);
+        $unit=(int)$campaign['unit_price'];
+        $out=fopen('php://temp','w+');
+        fwrite($out,"\xEF\xBB\xBF"); // UTF-8 BOM for Excel
+        fputcsv($out,['予約ID','相談日','相談開始時刻','担当講師','実施件数','単価（円）','金額（円）']);
+        foreach($items as $item){
+            $teacher=(string)$item['teacher_name'];
+            if(preg_match('/^[\s]*[=+\-@]/u',$teacher))$teacher="'".$teacher;
+            fputcsv($out,[(int)$item['booking_id'],substr($item['starts_at'],0,10),
+                substr($item['starts_at'],11,5),$teacher,1,$unit,$unit]);
+        }
+        fputcsv($out,['合計','','','',count($items),'',count($items)*$unit]);
+        rewind($out);
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="tanseisha-invoice-'.$month.'.csv"');
+        header('Cache-Control: no-store');
+        fpassthru($out);fclose($out);exit;
+    }
     if($action==='corporateAdmin' && $method==='GET'){
         requireAdmin();$campaign=corporateCampaign();
         $teachers=db()->query('SELECT id,name,active FROM teachers ORDER BY name')->fetchAll();
@@ -253,7 +292,7 @@ function corporateRoute(string $action,string $method): void {
            'name'=>$campaign['name'],'published'=>(bool)$campaign['published'],'unit_price'=>(int)$campaign['unit_price'],
            'starts_on'=>$campaign['starts_on'],'ends_on'=>$campaign['ends_on']]:null,
            'teachers'=>$teachers,'assigned'=>$assigned,'slots'=>$slots,'bookings'=>$bookings,
-           'counts'=>$counts,'completed_total_jpy'=>($counts['completed']??0)*8000]);
+           'counts'=>$counts,'completed_total_jpy'=>($counts['completed']??0)*(int)$campaign['unit_price']]);
     }
     if($action==='corporateSetup' && $method==='POST'){
         requireMasterAdmin();checkCsrf();$v=body();

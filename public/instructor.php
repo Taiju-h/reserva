@@ -18,6 +18,16 @@ declare(strict_types=1);
 <section class="panel" id="teacherScheduleArea" hidden>
 <div class="teacher-bar"><h2 id="teacherWelcome"></h2><button id="teacherLogout" type="button" class="secondary">ログアウト</button></div>
 <p class="hint">企業案件の受付期間：2026/12/20〜2027/2/28（12/28〜1/3休業）。平日：8時・18時・19時開始、土日祝：9時〜19時開始。1枠60分です。</p>
+<h3>月別カレンダーから日付を選択</h3>
+<div class="teacher-calendar" aria-label="先生の空き枠カレンダー">
+<div class="teacher-calendar-toolbar">
+<button id="teacherCalendarPrev" type="button" class="secondary" aria-label="前の月">前月</button>
+<strong id="teacherCalendarMonth"></strong>
+<button id="teacherCalendarNext" type="button" class="secondary" aria-label="次の月">翌月</button>
+</div>
+<div id="teacherCalendarGrid" class="teacher-calendar-grid" aria-live="polite"></div>
+<p class="hint">日付を押すと登録フォームへ反映されます。数字は登録済みの空き枠数です。予約済み枠は別に表示します。</p>
+</div>
 <h3>受付できる日時を登録</h3>
 <form id="teacherSlotForm"><label>日付<input type="date" name="date" min="2026-12-20" max="2027-02-28" required></label>
 <label>開始時間<select name="time" required><option value="">選択してください</option><option value="08:00">08:00</option><option value="09:00">09:00</option><option value="10:00">10:00</option><option value="11:00">11:00</option><option value="12:00">12:00</option><option value="13:00">13:00</option><option value="14:00">14:00</option><option value="15:00">15:00</option><option value="16:00">16:00</option><option value="17:00">17:00</option><option value="18:00">18:00</option><option value="19:00">19:00</option></select></label>
@@ -36,4 +46,4 @@ declare(strict_types=1);
 </form>
 <h3>登録済みの枠</h3><p class="hint">「空き」の枠だけ取消できます。</p><div id="teacherSlots">読み込み中…</div>
 </section>
-</main><script src="/assets/instructor.js?v=20261126-1" defer></script></body></html>
+</main><script src="/assets/instructor.js?v=20261126-calendar2" defer></script></body></html>

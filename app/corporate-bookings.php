@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 // Isolated company-funded pilot. Never calls Stripe and never modifies public menus.
+final class CorporateBookingConflict extends RuntimeException {}
 function corporateCampaign(): array {
     $q=db()->prepare("SELECT * FROM corporate_campaigns WHERE code='tanseisha' LIMIT 1");
     $q->execute();
@@ -192,12 +193,12 @@ function corporateRoute(string $action,string $method): void {
               ON ct.campaign_id=s.campaign_id AND ct.teacher_id=s.teacher_id AND ct.enabled=1
               WHERE s.id=? AND s.campaign_id=? AND s.teacher_id=? FOR UPDATE');
             $q->execute([$slotId,$campaign['id'],$teacher]);$slot=$q->fetch(PDO::FETCH_ASSOC);
-            if(!$slot||$slot['booked_id']!==null){$pdo->rollBack();fail('この時間はすでに予約されています',409);}
+            if(!$slot||$slot['booked_id']!==null){throw new CorporateBookingConflict('この時間はすでに予約されています');}
             $date=substr($slot['starts_at'],0,10);$time=substr($slot['starts_at'],11,5);
             $now=(new DateTimeImmutable('now',new DateTimeZone('Asia/Tokyo')))->format('Y-m-d H:i:s');
             if($slot['starts_at']<=$now||!corporateTimeAllowed($date,$time)||
                (strtotime($slot['ends_at'])-strtotime($slot['starts_at']))!==3600){
-                $pdo->rollBack();fail('この時間は受付できません',409);
+                throw new CorporateBookingConflict('この時間は受付できません');
             }
             // The same instructor may also be assigned to general paid consultations.
             $conflict=$pdo->prepare('SELECT COUNT(*) FROM bookings b JOIN menus m ON m.id=b.menu_id
@@ -207,11 +208,11 @@ function corporateRoute(string $action,string $method): void {
                  (b.status="pending_payment" AND sp.expires_at>NOW()))
                 AND b.starts_at<? AND b.ends_at>?');
             $conflict->execute([$teacher,$slot['ends_at'],$slot['starts_at']]);
-            if((int)$conflict->fetchColumn()>0){$pdo->rollBack();fail('先生の別の予約と重複しています',409);}
+            if((int)$conflict->fetchColumn()>0){throw new CorporateBookingConflict('先生の別の予約と重複しています');}
             $q=$pdo->prepare('SELECT COUNT(*) FROM corporate_bookings WHERE campaign_id=?
                  AND customer_email=? AND status IN ("confirmed","completed")');
             $q->execute([$campaign['id'],$email]);
-            if((int)$q->fetchColumn()>0){$pdo->rollBack();fail('このメールアドレスでは既に予約があります。変更は事務局へご連絡ください',409);}
+            if((int)$q->fetchColumn()>0){throw new CorporateBookingConflict('このメールアドレスでは既に予約があります。変更は事務局へご連絡ください');}
             $insert=$pdo->prepare('INSERT INTO corporate_bookings
               (campaign_id,slot_id,teacher_id,customer_id,customer_name,customer_email,customer_phone,employee_reference)
               VALUES(?,?,?,?,?,?,?,?)');
@@ -221,6 +222,10 @@ function corporateRoute(string $action,string $method): void {
             $pdo->commit();$_SESSION['last_corporate_booking_at']=time();
             bookingUnlock($pdo);
             jsonOut(['ok'=>true,'booking_id'=>$id,'date'=>$date,'time'=>$time]);
+        }catch(CorporateBookingConflict $e){
+            if($pdo->inTransaction())$pdo->rollBack();
+            bookingUnlock($pdo);
+            fail($e->getMessage(),409);
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();bookingUnlock($pdo);throw $e;}
     }
     if($action==='corporateAdmin' && $method==='GET'){

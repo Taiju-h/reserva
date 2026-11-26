@@ -332,3 +332,17 @@ header nav a{font-size:13px;color:#555}
 #adminView #corporateAdminRoot fieldset{border:1px solid #d6e2df;border-radius:9px;margin:20px 0}
 #adminView #corporateAdminRoot .scroll{max-height:400px;overflow:auto}
 #adminView #corporateAdminRoot td button{padding:7px 9px;font-size:12px}
+
+
+/* Separate company-only entrance, without replacing general paid consultations */
+.corporate-entry-banner{display:flex;gap:22px;align-items:center;justify-content:space-between;padding:18px 22px;border:1px solid #cfdfdf;border-left:5px solid #ed784f;background:#fff8f1;border-radius:12px;margin:20px 0 24px}
+.corporate-entry-banner strong{font-size:19px;color:#2d4650}
+.corporate-entry-banner p{margin:7px 0 0;color:#4f6670;line-height:1.7}
+.corporate-entry-link{display:inline-block;white-space:nowrap;color:white!important;background:#247d71;font-weight:700;padding:12px 18px;text-decoration:none;border-radius:9px}
+.corporate-entry-link:hover{background:#126357}
+#corporateRosterAdmin{border-top:2px solid #dce8e2;margin-top:28px;padding-top:16px}
+#corporateRosterAdmin textarea{width:100%;border:1px solid #c9d7d5;border-radius:8px;padding:12px;line-height:1.6}
+#corporateRosterAdmin .corporate-roster-controls{padding:16px;border:1px solid #dde9e6;border-radius:10px;margin:18px 0}
+#corporateRosterAdmin details{margin-top:16px}
+#corporateRosterAdmin details summary{cursor:pointer;font-weight:700}
+@media(max-width:700px){.corporate-entry-banner{flex-direction:column;align-items:stretch}.corporate-entry-link{text-align:center}}

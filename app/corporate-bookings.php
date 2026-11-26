@@ -114,6 +114,7 @@ function corporateRoute(string $action,string $method): void {
         if(mb_strlen($name)<1||mb_strlen($name)>100||!filter_var($email,FILTER_VALIDATE_EMAIL)||
            strlen($email)>254||strlen($phone)>40||mb_strlen($reference)>80)fail('氏名・メールアドレスをご確認ください');
         if(empty($v['consent']))fail('個人情報の利用目的への同意が必要です');
+        if(!corporateEmailVerified($campaign,$email))fail('メールアドレスの確認が必要です',403);
         if((int)($campaign['roster_required']??0)===1){
             $check=db()->prepare('SELECT id FROM corporate_invitees WHERE campaign_id=? AND email=? AND active=1 LIMIT 1');
             $check->execute([(int)$campaign['id'],$email]);
@@ -176,6 +177,7 @@ function corporateRoute(string $action,string $method): void {
         if(mb_strlen($name)<1||mb_strlen($name)>100||!filter_var($email,FILTER_VALIDATE_EMAIL)||
            strlen($email)>254||strlen($phone)>40||mb_strlen($ref)>80)fail('お客様情報を確認してください');
         if(empty($v['consent']))fail('個人情報の利用目的への同意が必要です');
+        if(!corporateEmailVerified($campaign,$email))fail('メールアドレスの確認が必要です',403);
         if((int)($campaign['roster_required']??0)===1){
             $check=db()->prepare('SELECT id FROM corporate_invitees WHERE campaign_id=? AND email=? AND active=1 LIMIT 1');
             $check->execute([(int)$campaign['id'],$email]);

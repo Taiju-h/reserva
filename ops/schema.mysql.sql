@@ -161,3 +161,56 @@ CREATE TABLE IF NOT EXISTS teacher_photo_assets (
  imported_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
  CONSTRAINT fk_teacher_photo_asset FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Company-funded appointments (new installs); existing sites use
+-- ops/migrate-corporate-bookings.php for additive migration.
+CREATE TABLE IF NOT EXISTS corporate_campaigns (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,code VARCHAR(40) NOT NULL UNIQUE,
+ name VARCHAR(150) NOT NULL,access_code_hash VARCHAR(255) NOT NULL,
+ starts_on DATE NOT NULL,ends_on DATE NOT NULL,unit_price INT NOT NULL DEFAULT 8000,
+ published TINYINT(1) NOT NULL DEFAULT 0,created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS corporate_teachers (
+ campaign_id BIGINT UNSIGNED NOT NULL,teacher_id BIGINT UNSIGNED NOT NULL,
+ enabled TINYINT(1) NOT NULL DEFAULT 1,PRIMARY KEY(campaign_id,teacher_id),
+ FOREIGN KEY(campaign_id) REFERENCES corporate_campaigns(id),
+ FOREIGN KEY(teacher_id) REFERENCES teachers(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS corporate_slots (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,campaign_id BIGINT UNSIGNED NOT NULL,
+ teacher_id BIGINT UNSIGNED NOT NULL,starts_at DATETIME NOT NULL,ends_at DATETIME NOT NULL,
+ booked_id BIGINT UNSIGNED NULL, UNIQUE KEY uq_corporate_slot(campaign_id,teacher_id,starts_at),
+ KEY idx_corporate_time(teacher_id,starts_at,ends_at),
+ FOREIGN KEY(campaign_id) REFERENCES corporate_campaigns(id),
+ FOREIGN KEY(teacher_id) REFERENCES teachers(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS corporate_customers (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,campaign_id BIGINT UNSIGNED NOT NULL,
+ email VARCHAR(254) NOT NULL,name VARCHAR(100) NOT NULL,
+ phone VARCHAR(40) NOT NULL DEFAULT '',employee_reference VARCHAR(80) NULL,
+ email_verified_at DATETIME NULL,
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ UNIQUE KEY uq_corporate_customer_email(campaign_id,email),
+ FOREIGN KEY(campaign_id) REFERENCES corporate_campaigns(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS corporate_bookings (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,campaign_id BIGINT UNSIGNED NOT NULL,
+ slot_id BIGINT UNSIGNED NOT NULL,teacher_id BIGINT UNSIGNED NOT NULL,
+ customer_id BIGINT UNSIGNED NULL,customer_name VARCHAR(100) NOT NULL,
+ customer_email VARCHAR(254) NOT NULL,customer_phone VARCHAR(40) NOT NULL DEFAULT '',
+ employee_reference VARCHAR(80) NULL,
+ status ENUM('confirmed','completed','cancelled','no_show') NOT NULL DEFAULT 'confirmed',
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ completed_at DATETIME NULL, KEY idx_corporate_booking_campaign_status(campaign_id,status),
+ KEY idx_corporate_booking_email(customer_email),
+ FOREIGN KEY(campaign_id) REFERENCES corporate_campaigns(id),
+ FOREIGN KEY(slot_id) REFERENCES corporate_slots(id),
+ FOREIGN KEY(teacher_id) REFERENCES teachers(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS teacher_logins (
+ teacher_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,login_id VARCHAR(100) NOT NULL UNIQUE,
+ password_hash VARCHAR(255) NOT NULL,active TINYINT(1) NOT NULL DEFAULT 1,
+ version INT UNSIGNED NOT NULL DEFAULT 1,created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY(teacher_id) REFERENCES teachers(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

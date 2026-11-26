@@ -15,7 +15,7 @@ function render(){
   const teachers=active.map(t=>'<label class="corporate-teacher-check"><input type="checkbox" value="'+Number(t.id)+'" '+(assigned.has(Number(t.id))?'checked':'')+'><span>'+esc(t.name)+'</span></label>').join('');
   const slots=(data.slots||[]).slice(-120).map(s=>'<tr><td>'+esc(s.starts_at)+'</td><td>'+esc(s.teacher_name)+'</td><td>'+(s.booked_id?'予約済み':'空き')+'</td><td>'+(s.booked_id?'—':'<button type="button" class="secondary" data-remove-slot="'+Number(s.id)+'">削除</button>')+'</td></tr>').join('');
   const bookings=(data.bookings||[]).map(b=>'<tr><td>'+Number(b.id)+'</td><td>'+esc(b.starts_at)+'</td><td>'+esc(b.teacher_name)+'</td><td>'+esc(b.customer_name)+'</td><td>'+esc(b.status)+'</td><td>'+
-    (b.status==='confirmed'?'<button type="button" class="secondary" data-complete="'+Number(b.id)+'">実施済みにする</button> <button type="button" class="secondary" data-cancel="'+Number(b.id)+'">取消</button>':'')+'</td></tr>').join('');
+    (b.status==='confirmed'?'<button type="button" class="secondary" data-complete="'+Number(b.id)+'">実施済みにする</button> <button type="button" class="secondary" data-no-show="'+Number(b.id)+'">欠席</button> <button type="button" class="secondary" data-cancel="'+Number(b.id)+'">取消</button>':'')+'</td></tr>').join('');
   host().innerHTML='<h3>案件設定</h3><p class="muted">専用URL：<a target="_blank" rel="noopener noreferrer" href="/tanseisha">/tanseisha</a>　期間：2026/12/20〜2027/2/28　休業：12/28〜1/3</p>'+
     '<form id="corporateSetupForm"><label>案件名<input name="name" maxlength="150" value="'+esc(campaign.name||'丹青社 60歳以降のセカンドキャリア相談')+'" required></label>'+
     '<label>利用者用の企業専用コード（12文字以上）<input name="access_code" type="password" minlength="12" placeholder="'+(campaign.name?'変更するときだけ入力':'必須：初期コードを入力')+'" '+(campaign.name?'':'required')+' autocomplete="new-password"></label>'+
@@ -73,10 +73,10 @@ function render(){
     try{await api('corporateSlotDelete',{}, {id:Number(btn.dataset.removeSlot)});await refresh();}
     catch(e){alert(e.message);}
   }));
-  host().querySelectorAll('[data-complete],[data-cancel]').forEach(btn=>btn.addEventListener('click',async()=>{
-    const id=Number(btn.dataset.complete||btn.dataset.cancel);
-    const status=btn.dataset.complete?'completed':'cancelled';
-    if(!confirm(status==='completed'?'実施済みと記録し請求対象にしますか？':'この予約を取り消しますか？'))return;
+  host().querySelectorAll('[data-complete],[data-cancel],[data-no-show]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const id=Number(btn.dataset.complete||btn.dataset.cancel||btn.dataset.noShow);
+    const status=btn.dataset.complete?'completed':btn.dataset.noShow?'no_show':'cancelled';
+    if(!confirm(status==='completed'?'実施済みとして請求対象にしますか？':status==='no_show'?'欠席と記録しますか？（請求対象外）':'この予約を取り消しますか？'))return;
     try{await api('corporateBookingStatus',{}, {id,status});await refresh();}
     catch(err){alert(err.message);}
   }));

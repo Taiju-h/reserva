@@ -80,5 +80,17 @@ try{
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
   $hasCustomer=(int)$pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='corporate_bookings' AND COLUMN_NAME='customer_id'")->fetchColumn();
   if(!$hasCustomer)$pdo->exec('ALTER TABLE corporate_bookings ADD COLUMN customer_id BIGINT UNSIGNED NULL, ADD INDEX idx_corporate_customer_id(customer_id)');
+  $pdo->exec('CREATE TABLE IF NOT EXISTS corporate_invitees (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    campaign_id BIGINT UNSIGNED NOT NULL,
+    email VARCHAR(254) NOT NULL,
+    display_name VARCHAR(100) NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_corporate_invitee(campaign_id,email),
+    CONSTRAINT fk_invitee_campaign FOREIGN KEY(campaign_id) REFERENCES corporate_campaigns(id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+  $rosterSetting=(int)$pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='corporate_campaigns' AND COLUMN_NAME='roster_required'")->fetchColumn();
+  if(!$rosterSetting)$pdo->exec('ALTER TABLE corporate_campaigns ADD COLUMN roster_required TINYINT(1) NOT NULL DEFAULT 0');
   echo "Corporate pilot schema ready; no public campaigns were enabled.\n";
 }catch(Throwable $e){fwrite(STDERR,"Migration failed: ".$e->getMessage()."\n");exit(1);}

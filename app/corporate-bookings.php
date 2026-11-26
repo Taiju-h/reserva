@@ -183,6 +183,11 @@ function corporateRoute(string $action,string $method): void {
         if(mb_strlen($name)<1||mb_strlen($name)>100||!filter_var($email,FILTER_VALIDATE_EMAIL)||
            strlen($email)>254||strlen($phone)>40||mb_strlen($ref)>80)fail('お客様情報を確認してください');
         if(empty($v['consent']))fail('個人情報の利用目的への同意が必要です');
+        if((int)($campaign['roster_required']??0)===1){
+            $check=db()->prepare('SELECT id FROM corporate_invitees WHERE campaign_id=? AND email=? AND active=1 LIMIT 1');
+            $check->execute([(int)$campaign['id'],$email]);
+            if(!$check->fetchColumn())fail('事前名簿に登録されたメールアドレスをご確認ください',403);
+        }
         $customerId=(int)($_SESSION['corporate_customer_id']??0);
         if($customerId<1||(int)($_SESSION['corporate_campaign_id']??0)!==(int)$campaign['id']
            ||($_SESSION['corporate_customer_email']??'')!==$email)

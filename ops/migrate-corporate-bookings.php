@@ -56,6 +56,14 @@ try{
     CONSTRAINT fk_corporate_booking_slot FOREIGN KEY(slot_id) REFERENCES corporate_slots(id),
     CONSTRAINT fk_corporate_booking_teacher FOREIGN KEY(teacher_id) REFERENCES teachers(id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+  $pdo->exec('CREATE TABLE IF NOT EXISTS teacher_photo_assets (
+    teacher_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    mime VARCHAR(32) NOT NULL,
+    image_bytes MEDIUMBLOB NOT NULL,
+    original_url TEXT NULL,
+    imported_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_teacher_photo_asset FOREIGN KEY(teacher_id) REFERENCES teachers(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
   $pdo->exec('CREATE TABLE IF NOT EXISTS teacher_logins (
     teacher_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
     login_id VARCHAR(100) NOT NULL UNIQUE,

@@ -63,3 +63,22 @@ docker compose --env-file /dev/null exec -T hanamaru php -l /var/www/html/app/in
 docker compose --env-file /dev/null exec -T hanamaru php -l /var/www/html/app/corporate-bookings.php
 docker compose --env-file /dev/null exec -T hanamaru php -l /var/www/html/public/index.php
 ```
+
+## 2026/11/26 打ち合わせ前の暫定仕様：専用入口＋名簿
+- 公開サイトのトップに **「丹青社専用の予約へ」** を追加し、`/tanseisha` に誘導。
+- 予約対象の**先生**は、既存講師42名から管理者が選ぶ参加講師10名。利用者には、その10名だけ顔写真・プロフィール・空き枠を表示する。
+- **受講者の事前名簿**を使うかは上田さんと協議中。仮実装として管理者だけが事前名簿（メールアドレス＋任意の氏名）を登録できる `corporate_invitees` を追加。
+- 名簿照合 `corporate_campaigns.roster_required` は **初期値0（無効）**。会議で決定後にマスター管理画面で任意に有効化。名簿を一般公開したり、受講者に別人の氏名を選ばせたりしない。
+- 予約者は先に氏名・メールアドレス・企業専用コードを入力。名簿照合を有効化した場合は登録済みのメールアドレスだけ受付。予約確定時にも再照合。
+- **メールアドレスを知っているだけでは本人確認にはならない**。運用開始前にメール確認・社内ID照合・個別招待リンク等の方式を決定する。
+- **議事確認事項**：名簿提供元、260名全員が対象か、人数上限、社員番号の必要性、メール本人確認方法、受講者への送信内容、講師10名の確定、予約変更の運用、プライバシー案内。
+- SSL警告の原因が未解決なのでキャンペーン公開は引き続き保留。
+
+### 反映
+```sh
+cd /var/www/hanamaru
+git pull --ff-only
+docker compose --env-file /dev/null exec -T hanamaru php /var/www/html/ops/migrate-corporate-bookings.php
+docker compose --env-file /dev/null exec -T hanamaru php -l /var/www/html/app/corporate-bookings.php
+docker compose --env-file /dev/null exec -T hanamaru php -l /var/www/html/public/index.php
+```

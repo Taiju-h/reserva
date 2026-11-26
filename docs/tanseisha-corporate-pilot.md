@@ -38,3 +38,28 @@ docker compose --env-file /dev/null exec -T hanamaru php -l /var/www/html/public
 sudo bash ops/diagnose-ssl.sh
 ```
 **注意:** migrationはテーブル作成のみ。企業案件は非公開のまま。実データの投入は管理画面で10名・予約枠・企業コードを設定してから。既存予約・Stripe決済は変更しない。
+
+## 講師本人のスケジュール入力（2026/11/26追加）
+- 先生専用URL：`/instructor`。管理画面とはログインを分離し、先生自身の枠のみ閲覧・変更
+- 管理者（マスター）が `/admin?page=corporate` から先生のログインIDと12文字以上の初期パスワードを発行
+- 先生は日付・開始時間を選んで1枠登録、または期間・曜日・時間を選んでまとめて登録
+- 企業向け期間外、休業日、許可外の時刻、過去日時は自動で拒否
+- 予約済みの時間は先生が削除不可。空き枠のみ削除可能
+- 先生に管理者アカウントを渡さず、権限を自分の `teacher_id` に限定
+
+## 予約者のメールアドレスによる登録
+- `/tanseisha` の最初の画面で氏名、メールアドレス、電話番号（任意）、社員番号（任意）、企業コードと同意を取得
+- `corporate_customers` を `(campaign_id,email)` で一意管理し、予約と `customer_id` を紐付け
+- その後は先生10名から希望を選び、先生本人が登録した空き枠だけを予約する
+- **重要：現状はメール送信・本人確認が未実装**。`email_verified_at` は NULL のまま。本人確認済みと表示したり、メールアドレスだけで本人の予約履歴を開かせたりしない
+- 確認メール・本人確認コードを本番で使用する場合はSMTP/Mailgun等の送信基盤の設定とテストが必要
+
+## マイグレーション
+更新済み `ops/migrate-corporate-bookings.php` は `teacher_logins`、`corporate_customers` を作成し、既存 `corporate_bookings` へ `customer_id` を追加する。繰り返し実行可能。
+```sh
+cd /var/www/hanamaru && git pull --ff-only
+docker compose --env-file /dev/null exec -T hanamaru php /var/www/html/ops/migrate-corporate-bookings.php
+docker compose --env-file /dev/null exec -T hanamaru php -l /var/www/html/app/instructor-portal.php
+docker compose --env-file /dev/null exec -T hanamaru php -l /var/www/html/app/corporate-bookings.php
+docker compose --env-file /dev/null exec -T hanamaru php -l /var/www/html/public/index.php
+```

@@ -24,8 +24,8 @@ function renderCalendar(){
    const date=monthCursor+'-'+String(n).padStart(2,'0');
    const booked=currentSlots.filter(x=>x.starts_at.startsWith(date)&&x.state!=='空き').length;
    const open=currentSlots.filter(x=>x.starts_at.startsWith(date)&&x.state==='空き').length;
-   const disabled=date<'2026-12-20'||date>'2027-02-28'||date<'2026-12-28'&&date<today||
-      date>='2026-12-28'&&date<='2027-01-03'||date<today;
+   const disabled=date<'2026-12-20'||date>'2027-02-28'||
+      (date>='2026-12-28'&&date<='2027-01-03')||date<today;
    html+='<button type="button" class="teacher-cal-day'+(date===selected?' selected':'')+'" data-day="'+date+'"'+(disabled?' disabled':'')+'>'+
      '<strong>'+n+'</strong><span>空き '+open+(booked?' / 予約 '+booked:'')+'</span></button>';
  }
@@ -67,6 +67,9 @@ async function refresh(){
  if(!data.assigned)$('teacherSlotStatus').textContent='企業案件の担当講師に登録されていません。管理者にご確認ください。';
  const slots=data.slots||[];
  currentSlots=slots;
+ const currentMonth=jpToday().slice(0,7);
+ if(currentMonth>'2026-12' && currentMonth<='2027-02' && monthCursor==='2026-12')
+   monthCursor=currentMonth;
  if(!monthCursor || monthCursor<'2026-12' || monthCursor>'2027-02')monthCursor='2026-12';
  renderCalendar();
  $('teacherSlots').innerHTML=slots.length?'<div class="slot-table"><table><thead><tr><th>日時</th><th>状態</th><th>操作</th></tr></thead><tbody>'+

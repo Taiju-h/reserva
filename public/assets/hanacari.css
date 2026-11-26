@@ -317,3 +317,18 @@ header nav a{font-size:13px;color:#555}
 #adminView .faviconUpload input{width:100%}
 #adminView #faviconMessage{font-weight:600}
 @media(max-width:650px){#adminView .favicon-control-row{grid-template-columns:1fr}}
+
+
+/* Corporate client consultation setup (admin only) */
+#adminView #corporateAdminRoot h3{margin:28px 0 12px;border-bottom:1px solid #e4e9ed;padding-bottom:8px}
+#adminView #corporateAdminRoot label{display:block;margin:12px 0 5px;font-weight:600}
+#adminView #corporateAdminRoot label input:not([type=checkbox]){margin-top:5px}
+#adminView .corporate-teachers{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:8px;margin:15px 0}
+#adminView .corporate-teacher-check{display:flex!important;align-items:center;gap:8px;background:#f4faf8;border:1px solid #d9e8e4;border-radius:8px;padding:10px;margin:0!important}
+#adminView .corporate-teacher-check input{width:auto!important;flex:none}
+#adminView .corporate-hours{display:flex;flex-wrap:wrap;gap:8px;padding:10px}
+#adminView .corporate-hours label{display:flex!important;align-items:center;gap:7px;padding:8px 10px;border:1px solid #dce9e4;border-radius:7px;margin:0!important}
+#adminView .corporate-hours input{width:auto!important}
+#adminView #corporateAdminRoot fieldset{border:1px solid #d6e2df;border-radius:9px;margin:20px 0}
+#adminView #corporateAdminRoot .scroll{max-height:400px;overflow:auto}
+#adminView #corporateAdminRoot td button{padding:7px 9px;font-size:12px}

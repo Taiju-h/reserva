@@ -87,7 +87,24 @@ function availability(int $menuId,string $date): array {
         AND b.starts_at < ? AND b.ends_at > ?
         AND (? IS NULL OR bm.teacher_id IS NULL OR bm.teacher_id=?)');
     $rows->execute([(new DateTimeImmutable())->format('Y-m-d H:i:s'),$end->format('Y-m-d H:i:s'),$start->format('Y-m-d H:i:s'),$teacherId,$teacherId]);
-    $busy=$rows->fetchAll();$out=[];
+    $busy=$rows->fetchAll();
+    // Prevent a paid/general menu from overlapping a confirmed company booking
+    // for the same teacher. The corporate schema is optional until migrated.
+    if($teacherId!==null){
+        static $corporateSlotsReady=null;
+        if($corporateSlotsReady===null){
+            $check=db()->query("SELECT COUNT(*) FROM information_schema.TABLES
+              WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='corporate_slots'");
+            $corporateSlotsReady=(int)$check->fetchColumn()===1;
+        }
+        if($corporateSlotsReady){
+            $corporateBusy=db()->prepare('SELECT starts_at,ends_at FROM corporate_slots
+              WHERE teacher_id=? AND booked_id IS NOT NULL AND starts_at<? AND ends_at>?');
+            $corporateBusy->execute([$teacherId,$end->format('Y-m-d H:i:s'),$start->format('Y-m-d H:i:s')]);
+            $busy=array_merge($busy,$corporateBusy->fetchAll());
+        }
+    }
+    $out=[];
     for($t=$start;$t->modify('+'.$duration.' minutes')<=$end;$t=$t->modify('+'.$step.' minutes')){
         if($t<$now->modify('+'.$leadMinutes.' minutes')) continue;
         $tEnd=$t->modify('+'.$duration.' minutes');

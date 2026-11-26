@@ -105,6 +105,7 @@ require_once $root.'/app/teacher-source-sync.php';
 require_once $root.'/app/stripe.php';
 require_once $root.'/app/media.php';
 require_once $root.'/app/favicons.php';
+require_once $root.'/app/corporate-bookings.php';
 $action=(string)($_GET['action']??'');
 $method=$_SERVER['REQUEST_METHOD']??'GET';
 try {
@@ -112,6 +113,7 @@ try {
     teacherProfileRoute($action,$method);
     syncMemberRoute($action,$method);
     faviconRoute($action,$method);
+    corporateRoute($action,$method);
     if($action==='media' && $method==='GET') mediaServe();
     if($action==='mediaUpload' && $method==='POST') mediaUpload();
     if($action==='mediaDelete' && $method==='POST') mediaDelete();
@@ -297,6 +299,10 @@ try {
     }
     if($action!=='') fail('APIが見つかりません',404);
 }catch(Throwable $e){error_log('[reserva] '.$e->getMessage());fail('処理に失敗しました。管理者にお問い合わせください',500);}
+if(in_array(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH),['/tanseisha','/tanseisha/'],true)){
+    require $root.'/public/corporate.php';
+    exit;
+}
 ?><!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>はなキャリ | ハナマルキャリアお仕事相談予約受付</title><link id="siteFavicon" rel="icon" href="/?action=favicon&amp;kind=<?=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH)==='/admin'?'admin':'public'?>&amp;v=20261123-1"><link rel="stylesheet" href="/assets/hanacari.css?v=20261123-favicons1"><style>
@@ -336,6 +342,7 @@ try {
 <button type="button" class="hana-admin-nav" data-admin-page="teachers">先生一覧・登録</button>
 <button type="button" class="hana-admin-nav" data-admin-page="qualifications">資格マスター</button>
 <button type="button" class="hana-admin-nav" data-admin-page="scheduling">受付条件・先生の予定</button>
+<button type="button" class="hana-admin-nav" data-admin-page="corporate">丹青社・企業向け予約</button>
 <button type="button" class="hana-admin-nav" data-admin-page="menus">予約メニュー設定</button>
 <button type="button" class="hana-admin-nav" data-admin-page="media">写真・画像</button>
 <button type="button" class="hana-admin-nav" data-admin-page="inquiries">問い合わせ・キャンセル待ち</button>
@@ -383,6 +390,11 @@ try {
 <p class="muted">資格の名称・分類を登録・編集できます。先生への資格の登録は「先生一覧・登録」→「プロフィール・写真・資格」から行ってください。</p>
 <section id="qualificationMasterArea" class="hana-qualification-master"><p>資格マスターを読み込んでいます…</p></section>
 </section>
+<section class="panel admin-pane" data-admin-section="corporate">
+<h2>丹青社・企業向け相談</h2>
+<p class="muted">会社負担・決済なしの専用案件です。講師10名の選択、講師別の空き枠、実施件数の請求集計を管理します。一般向けの有料予約とは別です。</p>
+<div id="corporateAdminRoot">読み込み中…</div>
+</section>
 <section class="panel admin-pane" data-admin-section="scheduling">
 <h2>受付条件・先生の予定</h2>
 <p class="muted">店舗全体 → 先生 → メニューの順に受付条件を管理します。どこかの階層で「受付禁止」に該当すると予約不可になります。受付許可は、同じ階層の該当日に時間を限定します。</p>
@@ -425,6 +437,7 @@ try {
 </section></div></div></div></main>
 <footer>Hanamaru Reservation Platform</footer>
 <script src="/assets/operations.js?v=20261123-explain2" defer></script>
+<script src="/assets/corporate-admin.js?v=20261126-1" defer></script>
 <script src="/assets/scheduling-admin.js?v=20261123-schedule2" defer></script>
 <script src="/assets/teachers-admin.js?v=20261123-sync2" defer></script>
 <script src="/assets/favicon-admin.js?v=20261123-1" defer></script>
@@ -522,7 +535,7 @@ $('bookingForm').onsubmit=async e=>{e.preventDefault();if(!pickedMenu||!pickedTi
 if(result.checkout_url){window.location.assign(result.checkout_url);return;}
 $('bookingForm').innerHTML='<div class="notice"><h2>予約が確定しました</h2><p>予約番号: '+result.booking_id+'</p><p>現在、自動確認メールは送信されません。予約番号と日時を控えてください。</p></div>';loadTimes();}catch(err){error('bookingError',err);$('bookBtn').disabled=false;}};
 $('loginForm').onsubmit=async e=>{e.preventDefault();try{await api('login',{}, {login_id:$('adminLoginId').value,password:$('password').value});$('password').value='';await dashboard();}catch(err){error('loginError',err);}};
-const adminPageNames=['bookings','manual','calendar','teachers','qualifications','scheduling','menus','media','inquiries','settings','users'];
+const adminPageNames=['bookings','manual','calendar','teachers','qualifications','scheduling','corporate','menus','media','inquiries','settings','users'];
 function adminPageFromUrl(){
     const page=new URLSearchParams(location.search).get('page');
     return adminPageNames.includes(page)?page:'bookings';
@@ -551,6 +564,7 @@ function loadAdminPage(page,updateUrl=false){
     if(currentAdminPage==='teachers' && window.refreshTeacherDirectory)window.refreshTeacherDirectory().catch(e=>error('teacherDirectoryResult',e));
     if(currentAdminPage==='qualifications' && window.refreshTeacherQualifications)window.refreshTeacherQualifications().catch(e=>{const x=$('qualificationMasterArea');if(x)x.textContent='資格マスターを取得できません：'+e.message;});
     if(currentAdminPage==='scheduling' && window.refreshSchedulingAdmin)window.refreshSchedulingAdmin().catch(e=>alert(e.message));
+    if(currentAdminPage==='corporate' && window.refreshCorporateAdmin)window.refreshCorporateAdmin().catch(e=>alert(e.message));
 }
 document.querySelectorAll('#dashboard [data-admin-page]').forEach(el=>el.addEventListener('click',()=>loadAdminPage(el.dataset.adminPage,true)));
 window.addEventListener('popstate',()=>{
@@ -567,6 +581,7 @@ adminNavigate(adminPageFromUrl());
 if(currentAdminPage==='teachers' && window.refreshTeacherDirectory)await window.refreshTeacherDirectory();
 if(currentAdminPage==='qualifications' && window.refreshTeacherQualifications)await window.refreshTeacherQualifications().catch(e=>{const x=$('qualificationMasterArea');if(x)x.textContent='資格マスターを取得できません：'+e.message;});
 if(currentAdminPage==='scheduling' && window.refreshSchedulingAdmin)await window.refreshSchedulingAdmin();
+if(currentAdminPage==='corporate' && window.refreshCorporateAdmin)await window.refreshCorporateAdmin();
 if(window.refreshSiteExtras)await window.refreshSiteExtras();
 }
 $('refresh').onclick=()=>dashboard().catch(e=>alert(e.message));

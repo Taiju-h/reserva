@@ -120,3 +120,16 @@ docker compose --env-file /dev/null exec -T hanamaru php -l app/corporate-bookin
 docker compose --env-file /dev/null exec -T hanamaru php -l app/instructor-portal.php
 ```
 `check-corporate-readiness.php` が終了コード2の場合は公開条件が未整備（必ずしも移行失敗ではない）。
+
+## 追加の品質対策（同日）
+- 予約確定はDBコミットを先に完了し、確認メールはその後に送信。送信不達は予約確定を取り消さない。APIは `confirmation_email_sent` を返し、画面は送信状況を区別する。
+- 実施時間が終了する前に「実施済み」「欠席」を設定できない。欠席は請求CSVに含めない。
+- 実施済み件数の請求CSVには、相談日・開始時刻・先生・予約ID・単価を出し、氏名とメールアドレスは出力しない。
+- 先生の予約枠一覧を最大1200件に変更し、対象期間の枠が500件で途切れる不具合を回避。
+- HTTPS終端がリバースプロキシの場合でも、`.env` の `APP_URL=https://...` を根拠にセッションCookieの `Secure` フラグを設定。SSL証明書警告そのものの解決は別途必要。
+- `tests/corporate-email-test.php` はメール認証の期限・メール不一致・案件不一致を検証。CIに追加。※実際のMailgun送信を試すものではない。
+
+### 運用上の留意点
+- 予約完了メールの送信成功はMailgun APIでの受理を意味し、受信箱への到達保証ではない。実機試験が必要。
+- メール確認 `required` 設定前に、対象者のメールアドレス、送信元ドメインのSPF/DKIM、メール配信プランを確定する。
+- SSL警告、個人情報保護方針、受講者対象条件が未決定のため、本番公開はしない。

@@ -214,3 +214,18 @@ CREATE TABLE IF NOT EXISTS teacher_logins (
  version INT UNSIGNED NOT NULL DEFAULT 1,created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
  FOREIGN KEY(teacher_id) REFERENCES teachers(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Optional, protected pre-registration list for a company campaign.
+-- Never present the full employee roster to unauthenticated visitors.
+CREATE TABLE IF NOT EXISTS corporate_invitees (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ campaign_id BIGINT UNSIGNED NOT NULL,
+ email VARCHAR(254) NOT NULL,
+ display_name VARCHAR(100) NULL,
+ active TINYINT(1) NOT NULL DEFAULT 1,
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE KEY uq_corporate_invitee(campaign_id,email),
+ FOREIGN KEY(campaign_id) REFERENCES corporate_campaigns(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- On existing installations: ops/migrate-corporate-bookings.php adds
+-- corporate_campaigns.roster_required DEFAULT 0.

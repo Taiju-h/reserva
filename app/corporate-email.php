@@ -20,7 +20,7 @@ function corporateEmailVerified(array $campaign,string $email): bool {
        (string)($_SESSION['corporate_email_verified']??'')===$email &&
        (int)($_SESSION['corporate_email_verified_until']??0)>=time());
 }
-function corporateEmailSend(string $address,string $code): bool {
+function corporateEmailDeliver(string $address,string $subject,string $message): bool {
     if(!corporateEmailReady())return false;
     $domain=setting('CORPORATE_MAILGUN_DOMAIN');
     if(!preg_match('/^[a-z0-9.-]{3,253}$/iD',$domain))return false;
@@ -35,14 +35,31 @@ function corporateEmailSend(string $address,string $code): bool {
         CURLOPT_POSTFIELDS=>http_build_query([
             'from'=>setting('CORPORATE_MAIL_FROM'),
             'to'=>$address,
-            'subject'=>'【はなキャリ】メールアドレス確認コード',
-            'text'=>"丹青社向けセカンドキャリア相談の確認コード：{$code}\n\n有効期限：10分\n\nお心当たりがない場合は、このメールを破棄してください。\n"
+            'subject'=>$subject,
+            'text'=>$message
         ]),
     ]);
     curl_exec($ch);
     $status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
     curl_close($ch);
     return $status>=200&&$status<300;
+}
+function corporateEmailSend(string $address,string $code): bool {
+    return corporateEmailDeliver(
+        $address,'【はなキャリ】メールアドレス確認コード',
+        "丹青社向けセカンドキャリア相談の確認コード：{$code}\n\n有効期限：10分\n\nお心当たりがない場合は、このメールを破棄してください。\n"
+    );
+}
+function corporateEmailBookingConfirmation(string $address,string $name,string $teacher,
+    string $date,string $time,int $bookingId): bool {
+    $text="{$name} 様\n\n丹青社 セカンドキャリア相談のご予約を受け付けました。\n\n".
+        "予約番号：{$bookingId}\n担当講師：{$teacher}\n".
+        "相談日：{$date}\n開始時刻：{$time}\n".
+        "相談50分・記入と休憩10分（計60分枠）\n".
+        "利用者のお支払い：ありません\n\n".
+        "変更・取消が必要な場合は、案内を受けた事務局へご連絡ください。\n\n".
+        "※このメールは予約受付に伴い送信されています。\n";
+    return corporateEmailDeliver($address,'【はなキャリ】丹青社 セカンドキャリア相談の予約確認',$text);
 }
 function corporateEmailRoute(string $action,string $method): void {
     if($action==='corporateEmailPolicy' && $method==='GET'){

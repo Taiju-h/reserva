@@ -75,7 +75,16 @@ function corporateRoute(string $action,string $method): void {
            LEFT JOIN teacher_profiles p ON p.teacher_id=t.id
            WHERE ct.campaign_id=? AND ct.enabled=1 AND t.active=1 ORDER BY t.name');
         $q->execute([$campaign['id']]);$teachers=$q->fetchAll(PDO::FETCH_ASSOC);
-        foreach($teachers as &$t)$t['photo_url']=$t['photo_path']!==''?('/?action=corporatePortrait&teacher_id='.$t['id']):null;
+        foreach($teachers as &$t){
+            $path=(string)$t['photo_path'];
+            if(str_starts_with($path,'/uploads/teacher-photos/'))
+                $t['photo_url']=$path;
+            else {
+                $q=db()->prepare('SELECT COUNT(*) FROM teacher_photo_assets WHERE teacher_id=?');
+                $q->execute([$t['id']]);
+                $t['photo_url']=(int)$q->fetchColumn()>0?'/?action=corporatePortrait&teacher_id='.$t['id']:null;
+            }
+        }
         unset($t);
         jsonOut(['ok'=>true,'campaign_name'=>$campaign['name'],'teachers'=>$teachers]);
     }

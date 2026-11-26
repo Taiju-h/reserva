@@ -123,6 +123,7 @@ require_once $root.'/app/stripe.php';
 require_once $root.'/app/media.php';
 require_once $root.'/app/favicons.php';
 require_once $root.'/app/corporate-bookings.php';
+require_once $root.'/app/instructor-portal.php';
 $action=(string)($_GET['action']??'');
 $method=$_SERVER['REQUEST_METHOD']??'GET';
 try {
@@ -131,6 +132,7 @@ try {
     syncMemberRoute($action,$method);
     faviconRoute($action,$method);
     corporateRoute($action,$method);
+    instructorRoute($action,$method);
     if($action==='media' && $method==='GET') mediaServe();
     if($action==='mediaUpload' && $method==='POST') mediaUpload();
     if($action==='mediaDelete' && $method==='POST') mediaDelete();
@@ -316,6 +318,10 @@ try {
     }
     if($action!=='') fail('APIが見つかりません',404);
 }catch(Throwable $e){error_log('[reserva] '.$e->getMessage());fail('処理に失敗しました。管理者にお問い合わせください',500);}
+if(in_array(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH),['/instructor','/instructor/'],true)){
+    require $root.'/public/instructor.php';
+    exit;
+}
 if(in_array(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH),['/tanseisha','/tanseisha/'],true)){
     require $root.'/public/corporate.php';
     exit;
@@ -411,6 +417,7 @@ if(in_array(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH),['/tanseisha','
 <h2>丹青社・企業向け相談</h2>
 <p class="muted">会社負担・決済なしの専用案件です。講師10名の選択、講師別の空き枠、実施件数の請求集計を管理します。一般向けの有料予約とは別です。</p>
 <div id="corporateAdminRoot">読み込み中…</div>
+<div id="instructorAdminRoot"></div>
 </section>
 <section class="panel admin-pane" data-admin-section="scheduling">
 <h2>受付条件・先生の予定</h2>
@@ -455,6 +462,7 @@ if(in_array(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH),['/tanseisha','
 <footer>Hanamaru Reservation Platform</footer>
 <script src="/assets/operations.js?v=20261123-explain2" defer></script>
 <script src="/assets/corporate-admin.js?v=20261126-1" defer></script>
+<script src="/assets/instructor-admin.js?v=20261126-1" defer></script>
 <script src="/assets/scheduling-admin.js?v=20261123-schedule2" defer></script>
 <script src="/assets/teachers-admin.js?v=20261123-sync2" defer></script>
 <script src="/assets/favicon-admin.js?v=20261123-1" defer></script>
@@ -582,6 +590,7 @@ function loadAdminPage(page,updateUrl=false){
     if(currentAdminPage==='qualifications' && window.refreshTeacherQualifications)window.refreshTeacherQualifications().catch(e=>{const x=$('qualificationMasterArea');if(x)x.textContent='資格マスターを取得できません：'+e.message;});
     if(currentAdminPage==='scheduling' && window.refreshSchedulingAdmin)window.refreshSchedulingAdmin().catch(e=>alert(e.message));
     if(currentAdminPage==='corporate' && window.refreshCorporateAdmin)window.refreshCorporateAdmin().catch(e=>alert(e.message));
+    if(currentAdminPage==='corporate' && window.refreshInstructorAdmin)window.refreshInstructorAdmin();
 }
 document.querySelectorAll('#dashboard [data-admin-page]').forEach(el=>el.addEventListener('click',()=>loadAdminPage(el.dataset.adminPage,true)));
 window.addEventListener('popstate',()=>{
@@ -599,6 +608,7 @@ if(currentAdminPage==='teachers' && window.refreshTeacherDirectory)await window.
 if(currentAdminPage==='qualifications' && window.refreshTeacherQualifications)await window.refreshTeacherQualifications().catch(e=>{const x=$('qualificationMasterArea');if(x)x.textContent='資格マスターを取得できません：'+e.message;});
 if(currentAdminPage==='scheduling' && window.refreshSchedulingAdmin)await window.refreshSchedulingAdmin();
 if(currentAdminPage==='corporate' && window.refreshCorporateAdmin)await window.refreshCorporateAdmin();
+if(currentAdminPage==='corporate' && window.refreshInstructorAdmin)await window.refreshInstructorAdmin();
 if(window.refreshSiteExtras)await window.refreshSiteExtras();
 }
 $('refresh').onclick=()=>dashboard().catch(e=>alert(e.message));

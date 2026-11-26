@@ -82,3 +82,41 @@ docker compose --env-file /dev/null exec -T hanamaru php /var/www/html/ops/migra
 docker compose --env-file /dev/null exec -T hanamaru php -l /var/www/html/app/corporate-bookings.php
 docker compose --env-file /dev/null exec -T hanamaru php -l /var/www/html/public/index.php
 ```
+
+## 2026/11/26 予約フローの品質改善
+### 予約処理
+- 60分枠と営業日・祝日・年末年始の純粋な検証関数：`app/corporate-policy.php`。
+- 回帰試験：`php tests/corporate-policy-test.php`（26ケース）。
+- 会社予約と一般予約の競合チェック、予約失敗時のDBトランザクションロールバックとロック解放処理を明示化。
+- **本番MySQLに対する複数接続の競合試験は未実施**。テスト枠で動作確認すること。
+
+### 先生用画面
+- `/instructor` に月別カレンダーを追加。日付の選択、空き・予約済み件数を表示。
+- 期間・曜日・時間帯による一括登録は従来の先生専用権限で利用可能。
+- 先生用ログインID・パスワードはマスター管理画面から発行する。公開・企業参加講師は管理者が確定する。
+
+### 利用者のメールアドレス確認
+- `CORPORATE_EMAIL_VERIFICATION=off` が既定。**この状態ではメールアドレスは本人認証ではない**。
+- `required` にすると、個人情報入力後、先生選択前に6桁のメール確認コードの送信・照合が必要。
+- 送信には `CORPORATE_MAILGUN_DOMAIN`、`CORPORATE_MAILGUN_API_KEY`、`CORPORATE_MAIL_FROM` が必要。
+- EUリージョンの場合 `CORPORATE_MAILGUN_REGION=eu`。コードは10分有効、試行5回、同一セッションで再送60秒制限。
+- 確認コードの平文はDBに保存しない。予約確定時にも検証済みメールアドレスを再照合。
+- **本番のメール送信と到着は未確認**。初期状態のままユーザーに「本人確認済み」と案内しない。大量アクセスへの対策としてプロキシ側のIPレート制限も追加確認が必要。
+
+### CSV出力と公開前診断
+- 管理画面 `/admin?page=corporate` から対象月を選択して、`completed`（実施済み）のみの請求CSVを出力。氏名・メールアドレスは含まない。
+- `php ops/check-corporate-readiness.php`：DBテーブル、担当講師10名、予約枠、プロフィール/画像未登録人数、メール設定、TLS・個人情報保護承認状態を確認する。**読み取り専用**。
+- 公開前のSSL診断は `sudo bash ops/diagnose-ssl.sh`。証明書が有効でもブラウザ警告の解消は別途確認する。
+
+### SQLをユーザーが適用した後の受入試験
+```sh
+cd /var/www/hanamaru
+git pull --ff-only
+docker compose --env-file /dev/null exec -T hanamaru php /var/www/html/ops/migrate-corporate-bookings.php
+docker compose --env-file /dev/null exec -T hanamaru php tests/corporate-policy-test.php
+docker compose --env-file /dev/null exec -T hanamaru php ops/check-corporate-readiness.php
+docker compose --env-file /dev/null exec -T hanamaru php -l app/corporate-email.php
+docker compose --env-file /dev/null exec -T hanamaru php -l app/corporate-bookings.php
+docker compose --env-file /dev/null exec -T hanamaru php -l app/instructor-portal.php
+```
+`check-corporate-readiness.php` が終了コード2の場合は公開条件が未整備（必ずしも移行失敗ではない）。

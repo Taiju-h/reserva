@@ -52,6 +52,23 @@ function corporateRoute(string $action,string $method): void {
     if($action==='corporateAccess' && $method==='POST'){
         checkCsrf();$v=body();$campaign=corporateCampaign();
         if(!corporateAuthorized($campaign,(string)($v['access_code']??'')))fail('企業専用コードが正しくありません',403);
+        $name=trim((string)($v['name']??''));
+        $email=strtolower(trim((string)($v['email']??'')));
+        $phone=trim((string)($v['phone']??''));
+        $reference=trim((string)($v['employee_reference']??''));
+        if(mb_strlen($name)<1||mb_strlen($name)>100||!filter_var($email,FILTER_VALIDATE_EMAIL)||
+           strlen($email)>254||strlen($phone)>40||mb_strlen($reference)>80)fail('氏名・メールアドレスをご確認ください');
+        if(empty($v['consent']))fail('個人情報の利用目的への同意が必要です');
+        // An email address identifies the customer record, but is not proof of ownership.
+        // Store it only for the active company campaign; never expose records by email lookup.
+        $q=db()->prepare('INSERT IGNORE INTO corporate_customers
+           (campaign_id,email,name,phone,employee_reference) VALUES(?,?,?,?,?)');
+        $q->execute([$campaign['id'],$email,$name,$phone,$reference?:null]);
+        $q=db()->prepare('SELECT id FROM corporate_customers WHERE campaign_id=? AND email=?');
+        $q->execute([$campaign['id'],$email]);
+        $_SESSION['corporate_customer_id']=(int)$q->fetchColumn();
+        $_SESSION['corporate_campaign_id']=(int)$campaign['id'];
+        $_SESSION['corporate_customer_email']=$email;
         $q=db()->prepare('SELECT t.id,t.name,COALESCE(p.summary,"") AS summary,
              COALESCE(p.career,"") AS career,COALESCE(p.photo_path,"") AS photo_path
            FROM corporate_teachers ct JOIN teachers t ON t.id=ct.teacher_id
@@ -85,11 +102,15 @@ function corporateRoute(string $action,string $method): void {
         checkCsrf();$v=body();$campaign=corporateCampaign();
         if(!corporateAuthorized($campaign,(string)($v['access_code']??'')))fail('企業専用コードが正しくありません',403);
         if(time()-(int)($_SESSION['last_corporate_booking_at']??0)<60)fail('続けて予約する場合は1分後に再試行してください',429);
-        $name=trim((string)($v['name']??''));$email=trim((string)($v['email']??''));
+        $name=trim((string)($v['name']??''));$email=strtolower(trim((string)($v['email']??'')));
         $phone=trim((string)($v['phone']??''));$ref=trim((string)($v['employee_reference']??''));
         if(mb_strlen($name)<1||mb_strlen($name)>100||!filter_var($email,FILTER_VALIDATE_EMAIL)||
            strlen($email)>254||strlen($phone)>40||mb_strlen($ref)>80)fail('お客様情報を確認してください');
         if(empty($v['consent']))fail('個人情報の利用目的への同意が必要です');
+        $customerId=(int)($_SESSION['corporate_customer_id']??0);
+        if($customerId<1||(int)($_SESSION['corporate_campaign_id']??0)!==(int)$campaign['id']
+           ||($_SESSION['corporate_customer_email']??'')!==$email)
+           fail('先にお客様情報を登録してください',401);
         $slotId=(int)($v['slot_id']??0);$teacher=(int)($v['teacher_id']??0);
         $pdo=db();bookingLock($pdo);$pdo->beginTransaction();
         try{
@@ -119,9 +140,9 @@ function corporateRoute(string $action,string $method): void {
             $q->execute([$campaign['id'],$email]);
             if((int)$q->fetchColumn()>0){$pdo->rollBack();fail('このメールアドレスでは既に予約があります。変更は事務局へご連絡ください',409);}
             $insert=$pdo->prepare('INSERT INTO corporate_bookings
-              (campaign_id,slot_id,teacher_id,customer_name,customer_email,customer_phone,employee_reference)
-              VALUES(?,?,?,?,?,?,?)');
-            $insert->execute([$campaign['id'],$slotId,$teacher,$name,$email,$phone,$ref?:null]);
+              (campaign_id,slot_id,teacher_id,customer_id,customer_name,customer_email,customer_phone,employee_reference)
+              VALUES(?,?,?,?,?,?,?,?)');
+            $insert->execute([$campaign['id'],$slotId,$teacher,$customerId,$name,$email,$phone,$ref?:null]);
             $id=(int)$pdo->lastInsertId();
             $pdo->prepare('UPDATE corporate_slots SET booked_id=? WHERE id=? AND booked_id IS NULL')->execute([$id,$slotId]);
             $pdo->commit();$_SESSION['last_corporate_booking_at']=time();

@@ -49,6 +49,68 @@ function corporateAvailability(int $campaignId,int $teacherId,string $date): arr
       static fn($r)=>corporateTimeAllowed($date,$r['time'])));
 }
 function corporateRoute(string $action,string $method): void {
+    if($action==='corporateRoster' && $method==='GET'){
+        requireMasterAdmin();
+        $campaign=corporateCampaign();
+        $rows=[];
+        if($campaign){
+            $q=db()->prepare('SELECT id,email,display_name,active FROM corporate_invitees WHERE campaign_id=? ORDER BY id DESC LIMIT 400');
+            $q->execute([(int)$campaign['id']]);$rows=$q->fetchAll(PDO::FETCH_ASSOC);
+        }
+        jsonOut(['roster'=>$rows,'required'=>(int)($campaign['roster_required']??0)===1,
+            'campaign_ready'=>(bool)$campaign]);
+    }
+    if($action==='corporateRosterImport' && $method==='POST'){
+        requireMasterAdmin();checkCsrf();$v=body();
+        $campaign=corporateCampaign();if(!$campaign)fail('先に企業案件を作成してください');
+        $text=trim((string)($v['entries']??''));
+        if($text===''||strlen($text)>50000)fail('名簿の入力は50KB以内で指定してください');
+        $lines=preg_split('/\\r\\n|\\n|\\r/',$text);
+        if(count($lines)>300)fail('1回の登録は300行までです');
+        $users=[];$errors=[];
+        foreach($lines as $i=>$line){
+            if(trim($line)==='')continue;
+            $cells=str_getcsv(trim($line));
+            if(count($cells)<1||count($cells)>2){$errors[]=$i+1;continue;}
+            // One row: email OR email,name. Never need to expose the roster to the public.
+            $email=strtolower(trim((string)$cells[0]));
+            $name=isset($cells[1])?trim((string)$cells[1]):'';
+            if(!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>254||mb_strlen($name)>100){$errors[]=$i+1;continue;}
+            $users[$email]=$name;
+        }
+        if($errors)fail('形式を確認してください（行番号：'.implode(',',array_slice($errors,0,20)).'）。1行につきメールアドレス,氏名（任意）で入力します');
+        if(!$users)fail('登録対象がありません');
+        $stmt=db()->prepare('INSERT INTO corporate_invitees(campaign_id,email,display_name,active) VALUES(?,?,?,1)
+             ON DUPLICATE KEY UPDATE display_name=VALUES(display_name),active=1');
+        $db=db();$db->beginTransaction();
+        try{
+            foreach($users as $email=>$name)$stmt->execute([(int)$campaign['id'],$email,$name?:null]);
+            $db->commit();
+        }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+        jsonOut(['ok'=>true,'processed'=>count($users)]);
+    }
+    if($action==='corporateRosterStatus' && $method==='POST'){
+        requireMasterAdmin();checkCsrf();$v=body();$campaign=corporateCampaign();
+        if(!$campaign)fail('企業案件がありません');
+        $id=(int)($v['id']??0);$active=!empty($v['active'])?1:0;
+        if($id<1)fail('対象が不正です');
+        $q=db()->prepare('UPDATE corporate_invitees SET active=? WHERE id=? AND campaign_id=?');
+        $q->execute([$active,$id,(int)$campaign['id']]);
+        jsonOut(['ok'=>true]);
+    }
+    if($action==='corporateRosterEnforcement' && $method==='POST'){
+        requireMasterAdmin();checkCsrf();$v=body();$campaign=corporateCampaign();
+        if(!$campaign)fail('企業案件がありません');
+        $required=!empty($v['required'])?1:0;
+        if($required===1){
+            $q=db()->prepare('SELECT COUNT(*) FROM corporate_invitees WHERE campaign_id=? AND active=1');
+            $q->execute([(int)$campaign['id']]);
+            if((int)$q->fetchColumn()===0)fail('事前名簿が空です。先にメールアドレスを登録してください');
+        }
+        $q=db()->prepare('UPDATE corporate_campaigns SET roster_required=? WHERE id=?');
+        $q->execute([$required,(int)$campaign['id']]);
+        jsonOut(['ok'=>true,'required'=>(bool)$required]);
+    }
     if($action==='corporateAccess' && $method==='POST'){
         checkCsrf();$v=body();$campaign=corporateCampaign();
         if(!corporateAuthorized($campaign,(string)($v['access_code']??'')))fail('企業専用コードが正しくありません',403);
@@ -59,6 +121,11 @@ function corporateRoute(string $action,string $method): void {
         if(mb_strlen($name)<1||mb_strlen($name)>100||!filter_var($email,FILTER_VALIDATE_EMAIL)||
            strlen($email)>254||strlen($phone)>40||mb_strlen($reference)>80)fail('氏名・メールアドレスをご確認ください');
         if(empty($v['consent']))fail('個人情報の利用目的への同意が必要です');
+        if((int)($campaign['roster_required']??0)===1){
+            $check=db()->prepare('SELECT id FROM corporate_invitees WHERE campaign_id=? AND email=? AND active=1 LIMIT 1');
+            $check->execute([(int)$campaign['id'],$email]);
+            if(!$check->fetchColumn())fail('このメールアドレスでは受付できません。ご案内されたメールアドレスをご確認ください',403);
+        }
         // An email address identifies the customer record, but is not proof of ownership.
         // Store it only for the active company campaign; never expose records by email lookup.
         $q=db()->prepare('INSERT IGNORE INTO corporate_customers

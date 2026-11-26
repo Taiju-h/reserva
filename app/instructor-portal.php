@@ -132,6 +132,42 @@ function instructorRoute(string $action,string $method): void {
           $start->format('Y-m-d H:i:s'),$end->format('Y-m-d H:i:s')]);
         jsonOut(['ok'=>true,'created'=>$q->rowCount()]);
     }
+    if($action==='instructorSlotBatch' && $method==='POST'){
+        $teacher=instructorRequire();checkCsrf();$v=body();
+        $campaign=corporateCampaign();if(!$campaign)fail('企業案件が登録されていません',404);
+        $q=db()->prepare('SELECT COUNT(*) FROM corporate_teachers WHERE campaign_id=? AND teacher_id=? AND enabled=1');
+        $q->execute([$campaign['id'],$teacher['teacher_id']]);if(!$q->fetchColumn())fail('この案件の担当講師ではありません',403);
+        $from=(string)($v['from']??'');$until=(string)($v['until']??'');
+        $hours=$v['hours']??[];$days=$v['days']??[];
+        if(!dateValid($from)||!dateValid($until)||$from>$until||
+           $from<'2026-12-20'||$until>'2027-02-28')fail('期間は2026/12/20〜2027/2/28で指定してください');
+        if(!is_array($hours)||!is_array($days)||!$hours||!$days)fail('曜日と時間帯を選択してください');
+        $hours=array_values(array_unique(array_map('intval',$hours)));
+        $days=array_values(array_unique(array_map('intval',$days)));
+        foreach($hours as $hour)if($hour<8||$hour>19)fail('時間の指定が不正です');
+        foreach($days as $day)if($day<0||$day>6)fail('曜日の指定が不正です');
+        $tz=new DateTimeZone('Asia/Tokyo');
+        $start=new DateTimeImmutable($from,$tz);$last=new DateTimeImmutable($until,$tz);
+        $now=new DateTimeImmutable('now',$tz);
+        $insert=db()->prepare('INSERT IGNORE INTO corporate_slots
+          (campaign_id,teacher_id,starts_at,ends_at) VALUES(?,?,?,?)');
+        $added=0;$count=0;
+        foreach(new DatePeriod($start,new DateInterval('P1D'),$last->modify('+1 day')) as $dateObj){
+            if(!in_array((int)$dateObj->format('w'),$days,true))continue;
+            foreach($hours as $hour){
+                $time=sprintf('%02d:00',$hour);$date=$dateObj->format('Y-m-d');
+                if(!corporateTimeAllowed($date,$time))continue;
+                $begin=$dateObj->setTime($hour,0);
+                if($begin<=$now)continue;
+                $end=$begin->modify('+60 minutes');
+                $insert->execute([$campaign['id'],$teacher['teacher_id'],
+                    $begin->format('Y-m-d H:i:s'),$end->format('Y-m-d H:i:s')]);
+                $added+=$insert->rowCount();$count++;
+                if($count>900)fail('一度に登録できる枠数を超えました');
+            }
+        }
+        jsonOut(['ok'=>true,'created'=>$added,'evaluated'=>$count]);
+    }
     if($action==='instructorSlotDelete' && $method==='POST'){
         $teacher=instructorRequire();checkCsrf();$id=(int)(body()['id']??0);
         if($id<1)fail('枠を選択してください');

@@ -35,6 +35,17 @@ declare(strict_types=1);
 <p id="identityError" role="alert"></p>
 </form>
 </section>
+<section id="emailVerification" class="panel" hidden>
+<h2>メールアドレスを確認してください</h2>
+<p id="verificationDestination"></p>
+<p>入力したメールアドレスに6桁の確認コードを送りました。有効期限は10分です。</p>
+<form id="verificationForm">
+<label>6桁の確認コード<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+<button type="submit">確認して先生を選ぶ</button>
+<p id="verificationError" role="alert"></p>
+</form>
+<button id="verificationBack" type="button" class="secondary">メールアドレスを修正する</button>
+</section>
 <section id="step2" class="panel" hidden>
 <h2>相談する先生を選んでください</h2>
 <p>先生の顔写真・プロフィールをご確認ください。空きがなければ別の先生も選べます。</p>
@@ -57,5 +68,5 @@ declare(strict_types=1);
 <p>本ページでのカード決済はありません。予約番号をお控えください。</p>
 </section>
 </main>
-<script src="/assets/corporate.js?v=20261126" defer></script>
+<script src="/assets/corporate.js?v=20261126-emailotp1" defer></script>
 </body></html>

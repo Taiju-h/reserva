@@ -10,17 +10,9 @@ function corporateAuthorized(array $campaign,string $code): bool {
     return $campaign && (int)$campaign['published']===1 &&
         $code!=='' && password_verify($code,(string)$campaign['access_code_hash']);
 }
-function corporateHoliday(string $date): bool {
-    return in_array($date,['2027-01-01','2027-01-11','2027-02-11','2027-02-23'],true);
-}
+require_once __DIR__.'/corporate-policy.php';
 function corporateTimeAllowed(string $date,string $time): bool {
-    if($date<'2026-12-20'||$date>'2027-02-28')return false;
-    if($date>='2026-12-28'&&$date<='2027-01-03')return false;
-    if(!preg_match('/^(?:[01]\d|2[0-3]):00$/D',$time))return false;
-    $day=(int)(new DateTimeImmutable($date.' 00:00:00',new DateTimeZone('Asia/Tokyo')))->format('w');
-    $hour=(int)substr($time,0,2);
-    if($day===0||$day===6||corporateHoliday($date))return $hour>=9&&$hour<=19;
-    return in_array($hour,[8,18,19],true);
+    return corporateAllowedStart($date,$time);
 }
 function corporateTeacherName(int $teacher): ?array {
     $q=db()->prepare('SELECT t.id,t.name,COALESCE(p.summary,"") AS summary,COALESCE(p.career,"") AS career,

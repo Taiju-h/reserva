@@ -46,4 +46,4 @@ declare(strict_types=1);
 </form>
 <h3>登録済みの枠</h3><p class="hint">「空き」の枠だけ取消できます。</p><div id="teacherSlots">読み込み中…</div>
 </section>
-</main><script src="/assets/instructor.js?v=20261126-calendar2" defer></script></body></html>
+</main><script src="/assets/instructor.js?v=20261126-calendar3" defer></script></body></html>

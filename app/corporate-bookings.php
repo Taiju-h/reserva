@@ -389,9 +389,16 @@ function corporateRoute(string $action,string $method): void {
        if($id<1||!in_array($status,['confirmed','completed','cancelled','no_show'],true))fail('予約状態が不正です');
        $pdo=db();$pdo->beginTransaction();
        try{
-          $q=$pdo->prepare('SELECT b.status,b.slot_id FROM corporate_bookings b WHERE b.id=? FOR UPDATE');
+          $q=$pdo->prepare('SELECT b.status,b.slot_id,s.ends_at FROM corporate_bookings b
+               JOIN corporate_slots s ON s.id=b.slot_id WHERE b.id=? FOR UPDATE');
           $q->execute([$id]);$current=$q->fetch();
           if(!$current){$pdo->rollBack();fail('予約がありません',404);}
+          if(in_array($status,['completed','no_show'],true)){
+              $now=(new DateTimeImmutable('now',new DateTimeZone('Asia/Tokyo')))->format('Y-m-d H:i:s');
+              if($current['ends_at']>$now){
+                  $pdo->rollBack();fail('相談時間が終了するまでは実施済み・欠席に変更できません',409);
+              }
+          }
           if($current['status']==='completed' && $status!=='completed'){$pdo->rollBack();fail('請求確定済みの予約は変更できません');}
           if($current['status']==='cancelled'&&$status!=='cancelled'){$pdo->rollBack();fail('取消済みの予約は新規で取り直してください');}
           $pdo->prepare('UPDATE corporate_bookings SET status=?,completed_at=IF(?="completed",NOW(),NULL) WHERE id=?')

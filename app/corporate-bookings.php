@@ -226,6 +226,15 @@ function corporateRoute(string $action,string $method): void {
         }
         jsonOut(['ok'=>true,'created'=>$created]);
     }
+    if($action==='corporateSlotDelete' && $method==='POST'){
+        requireAdmin();checkCsrf();$v=body();$campaign=corporateCampaign();
+        if(!$campaign)fail('案件がありません',404);
+        $slot=(int)($v['id']??0);if($slot<1)fail('枠が不正です');
+        $q=db()->prepare('DELETE FROM corporate_slots WHERE id=? AND campaign_id=? AND booked_id IS NULL');
+        $q->execute([$slot,$campaign['id']]);
+        if($q->rowCount()!==1)fail('予約済み、または存在しない枠は削除できません',409);
+        jsonOut(['ok'=>true]);
+    }
     if($action==='corporateBookingStatus' && $method==='POST'){
        requireAdmin();checkCsrf();$v=body();
        $id=(int)($v['id']??0);$status=(string)($v['status']??'');

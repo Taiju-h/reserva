@@ -35,7 +35,14 @@ function render(){
     '<h3>実績・請求集計</h3><p>見積：30名 × 8,000円 = 240,000円（構築費別）</p>'+
     '<p><strong>実施済み '+Number(data.counts?.completed||0)+'件 × 8,000円 = '+Number(data.completed_total_jpy||0).toLocaleString('ja-JP')+'円</strong></p>'+
     '<p class="muted">予約数ではなく「実施済み」件数のみ請求対象とします。</p>'+
+    '<div class="corporate-invoice-export"><label>請求対象月（空欄なら全期間） <input type="month" id="corporateInvoiceMonth" min="2026-12" max="2027-02"></label>'+
+    '<button type="button" id="corporateInvoiceDownload">実施済み件数CSVを出力</button></div>'+
     '<div class="scroll"><table><thead><tr><th>ID</th><th>相談日時</th><th>先生</th><th>氏名</th><th>状態</th><th>操作</th></tr></thead><tbody>'+bookings+'</tbody></table></div>';
+  document.getElementById('corporateInvoiceDownload').onclick=()=>{
+    const month=document.getElementById('corporateInvoiceMonth').value;
+    const url='/?action=corporateInvoiceCsv'+(month?'&month='+encodeURIComponent(month):'');
+    window.location.assign(url);
+  };
   const setup=document.getElementById('corporateSetupForm');
   const checkboxes=[...setup.querySelectorAll('input[type=checkbox]')];
   checkboxes.forEach(c=>c.addEventListener('change',()=>{document.getElementById('corporateTeacherCount').textContent='選択 '+checkboxes.filter(x=>x.checked).length+' / 10名';}));

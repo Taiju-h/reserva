@@ -25,7 +25,7 @@ function instructorSlots(int $teacherId): array {
        FROM corporate_slots s JOIN corporate_teachers ct ON ct.campaign_id=s.campaign_id
           AND ct.teacher_id=s.teacher_id AND ct.enabled=1
        WHERE s.campaign_id=? AND s.teacher_id=? AND s.starts_at>=NOW()
-       ORDER BY s.starts_at LIMIT 500');
+       ORDER BY s.starts_at LIMIT 1200');
     $q->execute([(int)$campaign['id'],$teacherId]);
     return $q->fetchAll(PDO::FETCH_ASSOC);
 }

@@ -223,7 +223,19 @@ function corporateRoute(string $action,string $method): void {
             $pdo->prepare('UPDATE corporate_slots SET booked_id=? WHERE id=? AND booked_id IS NULL')->execute([$id,$slotId]);
             $pdo->commit();$_SESSION['last_corporate_booking_at']=time();
             bookingUnlock($pdo);
-            jsonOut(['ok'=>true,'booking_id'=>$id,'date'=>$date,'time'=>$time]);
+            // Reservation is committed first; a mail-provider outage must not cancel it.
+            $confirmationSent=false;
+            if(corporateEmailReady()){
+                try{
+                    $teacherName=corporateTeacherName($teacher);
+                    $confirmationSent=corporateEmailBookingConfirmation(
+                        $email,$name,(string)($teacherName['name']??'担当講師'),$date,$time,$id);
+                }catch(Throwable $mailError){
+                    error_log('[corporate] confirmation email could not be sent for booking #'.$id);
+                }
+            }
+            jsonOut(['ok'=>true,'booking_id'=>$id,'date'=>$date,'time'=>$time,
+                'confirmation_email_sent'=>$confirmationSent]);
         }catch(CorporateBookingConflict $e){
             if($pdo->inTransaction())$pdo->rollBack();
             bookingUnlock($pdo);

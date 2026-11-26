@@ -68,5 +68,5 @@ declare(strict_types=1);
 <p>本ページでのカード決済はありません。予約番号をお控えください。</p>
 </section>
 </main>
-<script src="/assets/corporate.js?v=20261126-emailotp1" defer></script>
+<script src="/assets/corporate.js?v=20261126-emailotp2" defer></script>
 </body></html>

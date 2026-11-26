@@ -120,7 +120,8 @@ $('confirmBooking').addEventListener('click',async()=>{
     const d=await request('corporateBook',{
       ...state.user,teacher_id:Number(state.teacher.id),slot_id:Number(state.slot.id)
     });
-    $('confirmation').textContent='予約番号 '+d.booking_id+' / '+state.teacher.name+'先生 / '+d.date+' '+d.time+'開始（50分相談＋10分）';
+    $('confirmation').textContent='予約番号 '+d.booking_id+' / '+state.teacher.name+'先生 / '+d.date+' '+d.time+
+      '開始（50分相談＋10分）。'+(d.confirmation_email_sent?'確認メールを送信しました。':'予約番号を必ずお控えください。確認メールが送信されていない可能性があります。');
     show('complete');
   }catch(e){
     $('bookingMessage').textContent=e.message;

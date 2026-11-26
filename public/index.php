@@ -422,6 +422,7 @@ if(in_array(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH),['/tanseisha','
 <p class="muted">会社負担・決済なしの専用案件です。講師10名の選択、講師別の空き枠、実施件数の請求集計を管理します。一般向けの有料予約とは別です。</p>
 <div id="corporateAdminRoot">読み込み中…</div>
 <div id="instructorAdminRoot"></div>
+<div id="corporateRosterAdmin"></div>
 </section>
 <section class="panel admin-pane" data-admin-section="scheduling">
 <h2>受付条件・先生の予定</h2>
@@ -467,6 +468,7 @@ if(in_array(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH),['/tanseisha','
 <script src="/assets/operations.js?v=20261123-explain2" defer></script>
 <script src="/assets/corporate-admin.js?v=20261126-1" defer></script>
 <script src="/assets/instructor-admin.js?v=20261126-1" defer></script>
+<script src="/assets/corporate-roster-admin.js?v=20261126-1" defer></script>
 <script src="/assets/scheduling-admin.js?v=20261123-schedule2" defer></script>
 <script src="/assets/teachers-admin.js?v=20261123-sync2" defer></script>
 <script src="/assets/favicon-admin.js?v=20261123-1" defer></script>
@@ -595,6 +597,7 @@ function loadAdminPage(page,updateUrl=false){
     if(currentAdminPage==='scheduling' && window.refreshSchedulingAdmin)window.refreshSchedulingAdmin().catch(e=>alert(e.message));
     if(currentAdminPage==='corporate' && window.refreshCorporateAdmin)window.refreshCorporateAdmin().catch(e=>alert(e.message));
     if(currentAdminPage==='corporate' && window.refreshInstructorAdmin)window.refreshInstructorAdmin();
+    if(currentAdminPage==='corporate' && window.refreshCorporateRoster)window.refreshCorporateRoster();
 }
 document.querySelectorAll('#dashboard [data-admin-page]').forEach(el=>el.addEventListener('click',()=>loadAdminPage(el.dataset.adminPage,true)));
 window.addEventListener('popstate',()=>{
@@ -613,6 +616,7 @@ if(currentAdminPage==='qualifications' && window.refreshTeacherQualifications)aw
 if(currentAdminPage==='scheduling' && window.refreshSchedulingAdmin)await window.refreshSchedulingAdmin();
 if(currentAdminPage==='corporate' && window.refreshCorporateAdmin)await window.refreshCorporateAdmin();
 if(currentAdminPage==='corporate' && window.refreshInstructorAdmin)await window.refreshInstructorAdmin();
+if(currentAdminPage==='corporate' && window.refreshCorporateRoster)await window.refreshCorporateRoster();
 if(window.refreshSiteExtras)await window.refreshSiteExtras();
 }
 $('refresh').onclick=()=>dashboard().catch(e=>alert(e.message));

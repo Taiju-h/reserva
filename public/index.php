@@ -1,11 +1,6 @@
 <?php
 declare(strict_types=1);
 ini_set('display_errors', '0');
-session_set_cookie_params(['httponly'=>true, 'secure'=>!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off', 'samesite'=>'Lax']);
-session_start();
-header('X-Content-Type-Options: nosniff');
-header('Referrer-Policy: strict-origin-when-cross-origin');
-header('X-Frame-Options: DENY');
 $root = dirname(__DIR__);
 $env = [];
 if (is_file($root.'/.env')) {
@@ -16,6 +11,16 @@ if (is_file($root.'/.env')) {
         $env[trim($k)]=trim($v," \t\n\r\0\x0B\"'");
     }
 }
+// HTTPS is terminated at the host reverse proxy. APP_URL determines whether
+// session cookies must be Secure even when the PHP container receives HTTP.
+$secureSession=str_starts_with(strtolower($env['APP_URL']??''),'https://') ||
+    (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off');
+ini_set('session.use_strict_mode','1');
+session_set_cookie_params(['httponly'=>true,'secure'=>$secureSession,'samesite'=>'Lax']);
+session_start();
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('X-Frame-Options: DENY');
 date_default_timezone_set($env['APP_TIMEZONE'] ?? 'Asia/Tokyo');
 function setting(string $key, string $fallback=''): string { global $env; return $env[$key] ?? $fallback; }
 function jsonOut(array $data, int $status=200): never { http_response_code($status); header('Content-Type: application/json; charset=utf-8'); echo json_encode($data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES); exit; }

@@ -29,7 +29,7 @@ declare(strict_types=1);
 <label>メールアドレス <input name="email" type="email" autocomplete="email" maxlength="254" required></label>
 <label>電話番号（任意） <input name="phone" autocomplete="tel" maxlength="40"></label>
 <label>社員番号など（任意） <input name="employee_reference" maxlength="80" placeholder="必要な場合のみ"></label>
-<div class="privacy">入力された情報は予約の確認・管理、相談の実施連絡、会社への利用実績の集計に利用します。会社への請求は実施件数に基づきます。相談内容をこの予約画面へ入力する必要はありません。取り扱いについては<a href="https://reserva.be/hanamarusoudan/privacy" target="_blank" rel="noopener noreferrer">プライバシーポリシー</a>をご確認ください。</div>
+<div class="privacy">入力された情報は予約の確認・管理、相談の実施連絡、会社への利用実績の集計に利用します。相談内容や健康情報は入力しないでください。会社への請求は実施済み件数で集計します。個人情報の取扱いに関する正式な案内は、運用開始前に事務局が確認・掲載する必要があります。</div>
 <label class="agree"><input name="consent" type="checkbox" value="1" required> 個人情報の利用目的を確認し同意します。</label>
 <button type="submit">入力内容を確認して先生を選ぶ</button>
 <p id="identityError" role="alert"></p>

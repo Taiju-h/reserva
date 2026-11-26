@@ -56,5 +56,29 @@ try{
     CONSTRAINT fk_corporate_booking_slot FOREIGN KEY(slot_id) REFERENCES corporate_slots(id),
     CONSTRAINT fk_corporate_booking_teacher FOREIGN KEY(teacher_id) REFERENCES teachers(id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+  $pdo->exec('CREATE TABLE IF NOT EXISTS teacher_logins (
+    teacher_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    login_id VARCHAR(100) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    version INT UNSIGNED NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_teacher_login FOREIGN KEY(teacher_id) REFERENCES teachers(id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+  $pdo->exec('CREATE TABLE IF NOT EXISTS corporate_customers (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    campaign_id BIGINT UNSIGNED NOT NULL,
+    email VARCHAR(254) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(40) NOT NULL DEFAULT "",
+    employee_reference VARCHAR(80) NULL,
+    email_verified_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_corporate_customer_email(campaign_id,email),
+    CONSTRAINT fk_corporate_customer_campaign FOREIGN KEY(campaign_id) REFERENCES corporate_campaigns(id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+  $hasCustomer=(int)$pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='corporate_bookings' AND COLUMN_NAME='customer_id'")->fetchColumn();
+  if(!$hasCustomer)$pdo->exec('ALTER TABLE corporate_bookings ADD COLUMN customer_id BIGINT UNSIGNED NULL, ADD INDEX idx_corporate_customer_id(customer_id)');
   echo "Corporate pilot schema ready; no public campaigns were enabled.\n";
 }catch(Throwable $e){fwrite(STDERR,"Migration failed: ".$e->getMessage()."\n");exit(1);}

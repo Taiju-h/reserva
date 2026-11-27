@@ -86,3 +86,32 @@ function zoomDeleteMeeting(array $env,string $meetingId): void {
     if(!preg_match('/^[0-9]{8,20}$/D',$meetingId))throw new InvalidArgumentException('Invalid Zoom meeting ID');
     zoomApi($env,'DELETE','/meetings/'.$meetingId);
 }
+
+/**
+ * Admin-only diagnostic; never returns secrets, token, meeting links or start_url.
+ * Credentials remain in the server-side .env.
+ */
+function zoomAdminRoute(string $action,string $method): void {
+    if($action!=='zoomConfigStatus' || $method!=='GET')return;
+    requireMasterAdmin();
+    global $env;
+    $configured=zoomConfigured($env);
+    $host=(string)($env['ZOOM_HOST_EMAIL']??'');
+    $max=max(1,(int)($env['ZOOM_MAX_CONCURRENT_MEETINGS']??1));
+    $result=['configured'=>$configured,'host_email'=>$host,
+        'max_concurrent_meetings'=>$max,'api_implemented'=>true,
+        'booking_integration_enabled'=>false];
+    if(($_GET['probe']??'')==='1'){
+        if(!$configured){$result['connection']='not_configured';}
+        else {
+            try{
+                zoomAccessToken($env);
+                $result['connection']='authenticated';
+            }catch(Throwable $e){
+                error_log('[zoom] admin connection check failed');
+                $result['connection']='failed';
+            }
+        }
+    }
+    jsonOut($result);
+}

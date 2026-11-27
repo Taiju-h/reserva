@@ -129,6 +129,7 @@ require_once $root.'/app/media.php';
 require_once $root.'/app/favicons.php';
 require_once $root.'/app/corporate-bookings.php';
 require_once $root.'/app/corporate-email.php';
+require_once $root.'/app/zoom.php';
 require_once $root.'/app/instructor-portal.php';
 $action=(string)($_GET['action']??'');
 $method=$_SERVER['REQUEST_METHOD']??'GET';
@@ -138,6 +139,7 @@ try {
     syncMemberRoute($action,$method);
     faviconRoute($action,$method);
     corporateRoute($action,$method);
+    zoomAdminRoute($action,$method);
     corporateEmailRoute($action,$method);
     instructorRoute($action,$method);
     if($action==='media' && $method==='GET') mediaServe();

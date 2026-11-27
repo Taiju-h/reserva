@@ -8,6 +8,21 @@ async function refresh(){
   try{data=await api('corporateAdmin');render();}
   catch(e){host().innerHTML='<p class="error">'+esc(e.message)+'</p><p>未移行の場合は migrate-corporate-bookings.php を実行してください。</p>';}
 }
+async function showZoomStatus(probe=false){
+  const root=document.getElementById('corporateZoomStatus');
+  if(!root)return;
+  root.textContent=probe?'Zoom APIへ接続確認中…':'Zoom設定を確認中…';
+  try{
+    const z=await api('zoomConfigStatus',probe?{probe:'1'}:{});
+    root.innerHTML='<strong>Zoom Pro共通アカウント</strong><p>ホスト：'+esc(z.host_email||'未設定')+
+      ' ／ 同時開催の設定：'+Number(z.max_concurrent_meetings||1)+'件</p>'+
+      '<p>認証情報：'+(z.configured?'登録済み':'未設定')+
+      ' ／ API接続：'+(z.connection==='authenticated'?'認証成功':z.connection==='failed'?'認証失敗':z.connection==='not_configured'?'未設定':'未検証')+'</p>'+
+      '<p class="muted">会議の予約自動作成はまだ有効化されていません。現在の予約処理には影響しません。</p>'+
+      '<button type="button" id="corporateZoomProbe" class="secondary">Zoom接続をテスト</button>';
+    document.getElementById('corporateZoomProbe').onclick=()=>showZoomStatus(true);
+  }catch(e){root.textContent='Zoom設定を表示できません：'+e.message;}
+}
 function render(){
   const campaign=data.campaign||{};
   const assigned=new Set((data.assigned||[]).map(Number));
@@ -29,6 +44,7 @@ function render(){
     '<div><label>終了日<input type="date" name="until" min="2026-12-20" max="2027-02-28" value="2027-02-28" required></label></div></div>'+
     '<fieldset><legend>この先生が受付できる開始時刻</legend><div class="corporate-hours">'+[8,9,10,11,12,13,14,15,16,17,18,19].map(h=>'<label><input type="checkbox" name="hours" value="'+h+'"> '+String(h).padStart(2,'0')+':00</label>').join('')+'</div></fieldset>'+
     '<button type="submit">許可された日時に空き枠を作成</button></form><p id="corporateSlotsStatus" role="status"></p>'+
+    '<h3>Zoom連携</h3><div id="corporateZoomStatus" role="status">設定確認中…</div>'+ 
     '<h3>公開状態</h3><p><strong>'+(campaign.published?'公開中':'非公開（準備中）')+'</strong></p>'+
     '<button type="button" id="corporatePublish" class="secondary" '+(!campaign.name?'disabled':'')+'>'+(campaign.published?'予約受付を停止する':'10名と空き枠を確認して公開する')+'</button>'+
     '<h3>予約枠一覧（直近120件表示）</h3><div class="scroll"><table><thead><tr><th>日時</th><th>先生</th><th>状態</th><th>操作</th></tr></thead><tbody>'+slots+'</tbody></table></div>'+
@@ -38,6 +54,7 @@ function render(){
     '<div class="corporate-invoice-export"><label>請求対象月（空欄なら全期間） <input type="month" id="corporateInvoiceMonth" min="2026-12" max="2027-02"></label>'+
     '<button type="button" id="corporateInvoiceDownload">実施済み件数CSVを出力</button></div>'+
     '<div class="scroll"><table><thead><tr><th>ID</th><th>相談日時</th><th>先生</th><th>氏名</th><th>状態</th><th>操作</th></tr></thead><tbody>'+bookings+'</tbody></table></div>';
+  showZoomStatus();
   document.getElementById('corporateInvoiceDownload').onclick=()=>{
     const month=document.getElementById('corporateInvoiceMonth').value;
     const url='/?action=corporateInvoiceCsv'+(month?'&month='+encodeURIComponent(month):'');
